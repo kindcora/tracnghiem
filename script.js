@@ -58,6 +58,96 @@ window.addEventListener('unhandledrejection', function (ev) {
     ev.preventDefault?.();
 });
 
+// ============================================
+// 🚩 BOOKMARK / FLAG QUESTIONS (v1.9.0)
+// Lưu danh sách câu đã đánh dấu "xem lại sau" theo từng quizId.
+// Key: 'bookmarks_<quizId>'  →  Array<number> (chỉ số câu trong currentQuiz.questions GỐC)
+// ============================================
+function _bookmarkKey(quizId) { return 'bookmarks_' + quizId; }
+function getBookmarks(quizId) {
+    if (quizId == null) return [];
+    const arr = safeGetItem(_bookmarkKey(quizId), []);
+    return Array.isArray(arr) ? arr : [];
+}
+function setBookmarks(quizId, arr) {
+    if (quizId == null) return false;
+    return safeSetItem(_bookmarkKey(quizId), Array.isArray(arr) ? arr : []);
+}
+function isBookmarked(quizId, origIndex) {
+    return getBookmarks(quizId).indexOf(origIndex) !== -1;
+}
+/** Toggle bookmark theo origIndex. Trả về true nếu giờ đã đánh dấu, false nếu vừa gỡ. */
+function toggleBookmarkByOrig(quizId, origIndex) {
+    const arr = getBookmarks(quizId);
+    const k = arr.indexOf(origIndex);
+    if (k === -1) arr.push(origIndex); else arr.splice(k, 1);
+    setBookmarks(quizId, arr);
+    return k === -1;
+}
+/** Gọi từ inline onclick — chuyển từ shuffled index sang origIndex rồi toggle + cập nhật UI. */
+function toggleBookmark(shuffledIndex, ev) {
+    try {
+        if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+        if (!shuffledQuiz || !shuffledQuiz.questions[shuffledIndex]) return;
+        const q = shuffledQuiz.questions[shuffledIndex];
+        const quizId = currentQuiz && currentQuiz.id;
+        const origIdx = (q.__origIndex !== undefined) ? q.__origIndex : shuffledIndex;
+        const nowOn = toggleBookmarkByOrig(quizId, origIdx);
+        const btn = document.querySelector('.bookmark-btn[data-qidx="' + shuffledIndex + '"]');
+        if (btn) {
+            btn.classList.toggle('on', nowOn);
+            btn.textContent = nowOn ? '🚩' : '⚐';
+            btn.title = nowOn ? 'Đã đánh dấu — bấm để bỏ' : 'Đánh dấu xem lại sau';
+        }
+        const cell = document.querySelector('.qsp-cell[data-index="' + shuffledIndex + '"]');
+        if (cell) cell.classList.toggle('bookmarked', nowOn);
+        if (typeof showToast === 'function') {
+            showToast(nowOn ? '🚩 Đã đánh dấu câu ' + (shuffledIndex + 1) : '✓ Đã gỡ đánh dấu câu ' + (shuffledIndex + 1), 'success', 1200);
+        }
+    } catch (e) { console.warn('[toggleBookmark] error:', e); }
+}
+window.toggleBookmark = toggleBookmark;
+
+/**
+ * v1.9.0 — Bắt đầu ôn lại CHỈ những câu đã đánh dấu của một quiz.
+ * Tạo một quiz ảo trong bộ nhớ (không persist vào localStorage), gán id âm để phân biệt.
+ */
+function startBookmarkedReview(quizId) {
+    try {
+        const baseQuiz = quizzes.find(q => q.id === quizId);
+        if (!baseQuiz) return showToast('Không tìm thấy đề gốc!', 'error');
+        const bms = getBookmarks(quizId);
+        if (!bms.length) return showToast('Chưa có câu nào được đánh dấu', 'info');
+        // Build sub-questions theo bookmark (giữ nguyên thứ tự gốc)
+        const subQs = bms.slice().sort((a,b) => a-b)
+            .map(oi => baseQuiz.questions[oi])
+            .filter(Boolean);
+        if (!subQs.length) return showToast('Câu đánh dấu không còn hợp lệ', 'error');
+        // Tạo quiz tạm — id âm để không bị save
+        const tempId = -Math.abs(quizId) * 1000 - 9;
+        // Xoá entry cũ nếu có (chạy lại nhiều lần)
+        const existIdx = quizzes.findIndex(q => q.id === tempId);
+        if (existIdx !== -1) quizzes.splice(existIdx, 1);
+        const tempQuiz = {
+            id: tempId,
+            title: '🚩 Câu đánh dấu — ' + baseQuiz.title,
+            desc: 'Ôn lại ' + subQs.length + ' câu đã đánh dấu',
+            time: Math.max(5, Math.ceil(subQs.length * 0.5)),
+            shuffleQ: false, shuffleO: !!baseQuiz.shuffleO,
+            showReviewDetail: true,
+            questions: subQs,
+            __preloaded: true,  // không persist
+            __bookmarkReviewOf: quizId  // tham chiếu về quiz gốc
+        };
+        quizzes.push(tempQuiz);
+        startQuiz(tempId);
+    } catch (e) {
+        console.error('[startBookmarkedReview]', e);
+        try { showToast('Lỗi: ' + (e.message || e), 'error', 3000); } catch (_) {}
+    }
+}
+window.startBookmarkedReview = startBookmarkedReview;
+
 let questions = [];
 let quizzes = safeGetItem('quizzes', []);
 let history = safeGetItem('history', []);
@@ -493,13 +583,20 @@ function initQuestionStatusPanel() {
     document.getElementById('qspDone').textContent = 0;
 
     // Render các ô trạng thái câu hỏi
+    // v1.9.0 — Mark bookmarked cells
+    const __quizIdInit = currentQuiz && currentQuiz.id;
+    const __bmsInit = __quizIdInit != null ? getBookmarks(__quizIdInit) : [];
     grid.innerHTML = '';
     for (let i = 0; i < total; i++) {
         const cell = document.createElement('div');
         cell.className = 'qsp-cell';
         cell.textContent = i + 1;
-        cell.title = `Câu ${i + 1} - Bỏ trống`;
         cell.dataset.index = i;
+        const __qq = shuffledQuiz.questions[i];
+        const __oi = (__qq && __qq.__origIndex !== undefined) ? __qq.__origIndex : i;
+        const __isBM = __bmsInit.indexOf(__oi) !== -1;
+        if (__isBM) cell.classList.add('bookmarked');
+        cell.title = `Câu ${i + 1} - Bỏ trống` + (__isBM ? ' • 🚩 Đã đánh dấu' : '');
         cell.onclick = () => jumpToQuestion(i);
         grid.appendChild(cell);
     }
@@ -525,19 +622,26 @@ function updateQuestionStatusPanel() {
     const cells = grid.querySelectorAll('.qsp-cell');
     let done = 0;
 
+    // v1.9.0 — Re-sync bookmark class on each update
+    const __quizIdU = currentQuiz && currentQuiz.id;
+    const __bmsU = __quizIdU != null ? getBookmarks(__quizIdU) : [];
     cells.forEach((cell, i) => {
         const ua = userAnswers[i];
         const answered = ua !== undefined;
+        const __qq = shuffledQuiz.questions[i];
+        const __oi = (__qq && __qq.__origIndex !== undefined) ? __qq.__origIndex : i;
+        const __isBM = __bmsU.indexOf(__oi) !== -1;
 
         // Reset các trạng thái phân loại
         cell.classList.remove('answered', 'correct', 'wrong', 'current');
+        cell.classList.toggle('bookmarked', __isBM);
 
         if (answered) {
             done++;
             cell.classList.add('answered');
-            cell.title = `Câu ${i + 1} - Đã chọn ${String.fromCharCode(65 + ua)}`;
+            cell.title = `Câu ${i + 1} - Đã chọn ${String.fromCharCode(65 + ua)}` + (__isBM ? ' • 🚩 Đã đánh dấu' : '');
         } else {
-            cell.title = `Câu ${i + 1} - Bỏ trống`;
+            cell.title = `Câu ${i + 1} - Bỏ trống` + (__isBM ? ' • 🚩 Đã đánh dấu' : '');
         }
     });
 
@@ -989,6 +1093,13 @@ function shuffleArray(arr) {
 }
 
 function prepareQuizForDoing(quiz) {
+    // v1.9.0 — Tag chỉ số gốc lên từng câu hỏi (idempotent) để bookmark/SRS tham chiếu được bất chấp shuffle.
+    if (quiz && Array.isArray(quiz.questions)) {
+        for (let _i = 0; _i < quiz.questions.length; _i++) {
+            const _q = quiz.questions[_i];
+            if (_q && _q.__origIndex === undefined) _q.__origIndex = _i;
+        }
+    }
     // v1.4.0 — Lightweight clone instead of JSON.parse(JSON.stringify(...))
     // which doubles memory usage (~500KB for 450 questions). On low-RAM phones
     // (Zalo WebView) this can trigger OOM crash.
@@ -1006,7 +1117,7 @@ function prepareQuizForDoing(quiz) {
             for (let i = 0; i < n; i++) newOpts[i] = q.options[shuffled[i]];
             const newCorrect = shuffled.indexOf(q.correct);
             // Only include fields we use during rendering / scoring
-            return { question: q.question, options: newOpts, correct: newCorrect };
+            return { question: q.question, options: newOpts, correct: newCorrect, __origIndex: q.__origIndex };
         });
     } else {
         // No option shuffle → just keep a shallow copy of the array (references original questions)
@@ -1222,7 +1333,14 @@ function renderQuestionHTML(q, i) {
         `<label><input type="radio" name="q_${i}" value="${j}" onchange="userAnswers[${i}]=${j};updateProgress()">
             ${String.fromCharCode(65+j)}. ${escapeHtml(opt)}</label>`
     ).join('');
+    // v1.9.0 — Bookmark button (cờ xem lại sau)
+    const __quizId = currentQuiz && currentQuiz.id;
+    const __origIdx = (q && q.__origIndex !== undefined) ? q.__origIndex : i;
+    const __bm = __quizId != null && isBookmarked(__quizId, __origIdx);
+    const __bmIcon = __bm ? '🚩' : '⚐';
+    const __bmTitle = __bm ? 'Đã đánh dấu — bấm để bỏ' : 'Đánh dấu xem lại sau';
     return `<div class="do-question">
+        <button type="button" class="bookmark-btn${__bm ? ' on' : ''}" data-qidx="${i}" title="${__bmTitle}" aria-label="${__bmTitle}" onclick="toggleBookmark(${i}, event)">${__bmIcon}</button>
         <h4>Câu ${i+1}: ${escapeHtml(q.question)}</h4>
         ${opts}
     </div>`;
@@ -1473,6 +1591,13 @@ function _calculateQuizScore(correct, total) {
  */
 function _buildResultHtml(scoreInfo, correct, total, timeStr, reviewVisible) {
     const { score, percent, emoji, label, scoreClass } = scoreInfo;
+    // v1.9.0 — Bookmark count cho banner & nút làm lại câu đánh dấu
+    const __bmQuizId = currentQuiz && currentQuiz.id;
+    const __bmList = __bmQuizId != null ? getBookmarks(__bmQuizId) : [];
+    const __bmCount = __bmList.length;
+    const __bmBanner = __bmCount > 0
+        ? `<div class="result-bookmark-row"><span>🚩 Bạn đã đánh dấu <b>${__bmCount}</b> câu xem lại</span><button class="btn-info" style="padding:6px 14px;font-size:13px;width:auto;margin-left:auto" onclick="startBookmarkedReview(${__bmQuizId})">🔁 Làm lại các câu đánh dấu</button></div>`
+        : '';
     return `
         <div class="result-box ${scoreClass}">
             <div class="result-emoji-big">${emoji}</div>
@@ -1486,6 +1611,7 @@ function _buildResultHtml(scoreInfo, correct, total, timeStr, reviewVisible) {
             <div class="result-progress-ring">
                 <div class="result-progress-bar"><div class="result-progress-fill" style="width:${percent}%"></div></div>
             </div>
+            ${__bmBanner}
         </div>
         <div class="result-actions">
             <button class="btn-primary" onclick="if(currentQuiz){startQuiz(currentQuiz.id)}">🔁 Làm lại</button>

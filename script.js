@@ -877,6 +877,7 @@ function prepareQuizForDoing(quiz) {
     // Return a shallow-copied quiz (don't mutate original)
     return { id: quiz.id, title: quiz.title, desc: quiz.desc, time: quiz.time,
              shuffleQ: quiz.shuffleQ, shuffleO: quiz.shuffleO,
+             showReviewDetail: quiz.showReviewDetail,
              questionLimit: quiz.questionLimit, questions: qs };
 }
 
@@ -925,6 +926,8 @@ function customizeQuiz(id) {
     const curTime = quiz.time || 15;
     const curShuffleQ = !!quiz.shuffleQ;
     const curShuffleO = !!quiz.shuffleO;
+    // Mặc định: hiện chi tiết câu sai. Người dùng có thể tắt ở modal tùy chỉnh.
+    const curShowReviewDetail = (quiz.showReviewDetail === undefined) ? true : !!quiz.showReviewDetail;
     const curLimit = parseInt(quiz.questionLimit, 10);
     const curLimitVal = (!isNaN(curLimit) && curLimit > 0) ? curLimit : totalQuestions;
 
@@ -969,6 +972,14 @@ function customizeQuiz(id) {
             </label>
         </div>
 
+        <div class="form-group">
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+                <input type="checkbox" id="cqShowDetail" ${curShowReviewDetail ? 'checked' : ''} style="width:20px;height:20px;cursor:pointer">
+                <span>📖 Hiện <b>chi tiết câu đúng/sai</b> ngay trong trang kết quả</span>
+            </label>
+            <small style="color:#888;display:block;margin-left:30px;margin-top:4px">Tắt nếu đề lớn (&gt;150 câu) để tránh chậm/treo trên điện thoại</small>
+        </div>
+
         <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:20px">
             <button class="btn-primary" onclick="saveQuizCustomization(${id})">💾 Lưu cài đặt</button>
             <button class="btn-secondary" onclick="saveAndStartQuiz(${id})">▶️ Lưu &amp; Làm bài ngay</button>
@@ -985,13 +996,14 @@ function readCustomizationForm() {
     const limit = limitRaw === '' ? NaN : parseInt(limitRaw, 10);
     const shuffleQ = !!document.getElementById('cqShuffleQ')?.checked;
     const shuffleO = !!document.getElementById('cqShuffleO')?.checked;
-    return { time, limit, shuffleQ, shuffleO };
+    const showReviewDetail = !!document.getElementById('cqShowDetail')?.checked;
+    return { time, limit, shuffleQ, shuffleO, showReviewDetail };
 }
 
 function applyCustomizationToQuiz(id) {
     const quiz = quizzes.find(q => q.id === id);
     if (!quiz) { showToast('Không tìm thấy đề thi!', 'error'); return null; }
-    const { time, limit, shuffleQ, shuffleO } = readCustomizationForm();
+    const { time, limit, shuffleQ, shuffleO, showReviewDetail } = readCustomizationForm();
     if (isNaN(time) || time < 1) { showToast('Thời gian phải là số nguyên dương!', 'error'); return null; }
     if (time > 600 && !confirm(`Thời gian ${time} phút khá lớn. Bạn có chắc chắn?`)) return null;
 
@@ -1006,6 +1018,7 @@ function applyCustomizationToQuiz(id) {
     quiz.time = time;
     quiz.shuffleQ = shuffleQ;
     quiz.shuffleO = shuffleO;
+    quiz.showReviewDetail = showReviewDetail;
     quiz.questionLimit = finalLimit;
     saveQuizzes();
     return quiz;
@@ -1083,6 +1096,8 @@ function startQuiz(id) {
         }
         shuffledQuiz = prepareQuizForDoing(currentQuiz);
         userAnswers = {};
+        // v1.5.0 — record start time so we can compute timeSpent on submit
+        window.__quizStartedAt = Date.now();
         document.getElementById('doQuizTitle').textContent = currentQuiz.title;
 
         const container = document.getElementById('doQuizContent');
@@ -1091,8 +1106,9 @@ function startQuiz(id) {
 
         const questions = shuffledQuiz.questions;
         const total = questions.length;
-        // v1.4.0 — Reduced FIRST_BATCH from 20 to 10 for low-end mobile (Zalo WebView)
-        const FIRST_BATCH = Math.min(10, total);
+        // v1.4.0 — Reduced FIRST_BATCH for low-end mobile (Zalo WebView)
+        // v1.4.1 — Đề >150 câu: chỉ render 5 câu đầu để Safari/Zalo commit DOM ngay, tránh OOM/reload loop
+        const FIRST_BATCH = total > 150 ? Math.min(5, total) : Math.min(10, total);
         let firstHTML = '';
         for (let i = 0; i < FIRST_BATCH; i++) {
             firstHTML += renderQuestionHTML(questions[i], i);
@@ -1112,12 +1128,15 @@ function startQuiz(id) {
             hint.style.cssText = 'text-align:center;padding:12px;color:#888;font-style:italic;font-size:14px';
             hint.textContent = `⏳ Đang tải đề... ${FIRST_BATCH}/${total} câu`;
             container.appendChild(hint);
-            // Lazy render phần còn lại theo chunk nhỏ (15) để mượt trên mobile
+            // Lazy render phần còn lại theo chunk nhỏ (8 hoặc 15) để mượt trên mobile
+            // v1.4.1 — Đề lớn (>150): chunk 8 thay vì 15 để Safari/Zalo không bị block UI thread
             let idx = FIRST_BATCH;
-            const chunkSize = 15;
+            const chunkSize = total > 150 ? 8 : 15;
             const schedule = window.requestIdleCallback
                 ? (cb) => window.requestIdleCallback(cb, { timeout: 300 })
-                : (cb) => setTimeout(cb, 16);
+                : (window.requestAnimationFrame
+                    ? (cb) => window.requestAnimationFrame(() => setTimeout(cb, 0))
+                    : (cb) => setTimeout(cb, 16));
             function renderNext() {
                 try {
                     if (idx >= total) {
@@ -1210,12 +1229,17 @@ function submitQuiz() {
 
     // 2) Lưu lịch sử (try/catch phòng localStorage đầy)
     try {
+        // v1.5.0 — track time spent (in seconds) for stats
+        const timeSpent = window.__quizStartedAt
+            ? Math.max(0, Math.round((Date.now() - window.__quizStartedAt) / 1000))
+            : 0;
         history.push({
             quizId: currentQuiz ? currentQuiz.id : 0,
             quizTitle: currentQuiz ? currentQuiz.title : '(Không tên)',
             score: parseFloat(score), correct, total,
             date: new Date().toLocaleString('vi-VN'),
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            timeSpent: timeSpent
         });
         saveHistory();
     } catch (e) {
@@ -1233,7 +1257,7 @@ function submitQuiz() {
         </div>
         <div style="margin:20px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
             <h3 style="margin:0">📖 Chi tiết:</h3>
-            <button id="toggleReviewBtn" class="btn-secondary" style="padding:6px 12px;font-size:14px">${total > 50 ? '👁️ Hiện chi tiết' : '🙈 Ẩn chi tiết'}</button>
+            <button id="toggleReviewBtn" class="btn-secondary" style="padding:6px 12px;font-size:14px">${reviewVisible ? '🙈 Ẩn chi tiết' : '👁️ Hiện chi tiết'}</button>
         </div>
         <div id="reviewContainer"></div>
     `;
@@ -1246,7 +1270,9 @@ function submitQuiz() {
     const reviewContainer = document.getElementById('reviewContainer');
     const toggleBtn = document.getElementById('toggleReviewBtn');
     let reviewRendered = false;
-    let reviewVisible = total <= 50; // Đề <=50 câu: tự hiện. Đề lớn: ẩn để tránh crash.
+    // Tùy chọn từ modal tùy chỉnh: showReviewDetail (mặc định true). Đề >150 câu vẫn ẩn để tránh crash WebView; người dùng có thể bấm nút để hiện.
+    const userWantsDetail = (shuffledQuiz && shuffledQuiz.showReviewDetail === false) ? false : true;
+    let reviewVisible = userWantsDetail && (total <= 150);
 
     function buildItemHTML(q, i) {
         try {
@@ -1544,97 +1570,339 @@ D. Huế
     document.getElementById('modal').style.display = 'block';
 }
 
-// ============= THỐNG KÊ =============
+// ============= THỐNG KÊ (v1.5.0 — enhanced) =============
 let scoreChartObj = null, pieChartObj = null;
+
+// Helper: format seconds into human-readable Vietnamese duration
+function formatDuration(sec) {
+    sec = Math.max(0, Math.floor(sec || 0));
+    if (sec < 60) return sec + 's';
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    if (m < 60) return s ? `${m}p ${s}s` : `${m}p`;
+    const h = Math.floor(m / 60);
+    const mm = m % 60;
+    return mm ? `${h}h ${mm}p` : `${h}h`;
+}
+
+// Helper: compute current streak — consecutive recent entries with score >= 5
+function computeStreak() {
+    if (!history.length) return 0;
+    const sorted = [...history].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+    let s = 0;
+    for (const h of sorted) {
+        if (h.score >= 5) s++;
+        else break;
+    }
+    return s;
+}
+
+// Helper: count history within time window (ms)
+function countWithin(ms) {
+    const cutoff = Date.now() - ms;
+    return history.filter(h => (h.timestamp || 0) >= cutoff);
+}
+
+// Helper: classify score → CSS variant
+function scoreClass(score) {
+    if (score >= 8) return 'excellent';
+    if (score >= 6.5) return 'good';
+    if (score >= 5) return 'average';
+    return 'weak';
+}
+
+// Helper: apply current history filters (search/score/date) → filtered array
+function getFilteredHistory() {
+    const searchEl = document.getElementById('historySearch');
+    const scoreEl = document.getElementById('historyScoreFilter');
+    const dateEl = document.getElementById('historyDateFilter');
+    const q = (searchEl && searchEl.value || '').trim().toLowerCase();
+    const sf = scoreEl ? scoreEl.value : 'all';
+    const df = dateEl ? dateEl.value : 'all';
+    const now = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
+    return history.filter(h => {
+        if (q && !(h.quizTitle || '').toLowerCase().includes(q)) return false;
+        if (sf !== 'all') {
+            const cls = scoreClass(h.score);
+            if (cls !== sf) return false;
+        }
+        if (df !== 'all' && h.timestamp) {
+            const age = now - h.timestamp;
+            if (df === 'today' && age > dayMs) return false;
+            if (df === 'week' && age > 7 * dayMs) return false;
+            if (df === 'month' && age > 30 * dayMs) return false;
+        }
+        return true;
+    });
+}
+
+// Render the history list — re-callable on filter change
+function renderHistoryList() {
+    const histList = document.getElementById('historyList');
+    if (!histList) return;
+    const filtered = getFilteredHistory();
+    if (history.length === 0) {
+        histList.innerHTML = `<div class="history-empty"><span class="emoji">📭</span>Chưa có lịch sử làm bài.<br>Hãy thử làm một đề thi nhé!</div>`;
+        return;
+    }
+    if (filtered.length === 0) {
+        histList.innerHTML = `<div class="history-empty"><span class="emoji">🔍</span>Không tìm thấy lịch sử khớp với bộ lọc.</div>`;
+        return;
+    }
+    // Newest first, capped at 50 entries for performance
+    const display = [...filtered].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)).slice(0, 50);
+    histList.innerHTML = display.map(h => {
+        const cls = scoreClass(h.score);
+        const timeText = h.timeSpent ? ` • ⏱️ ${formatDuration(h.timeSpent)}` : '';
+        return `
+            <div class="history-item left-${cls}">
+                <div class="h-info">
+                    <b>${escapeHtml(h.quizTitle)}</b>
+                    <small>${escapeHtml(h.date || '')} • Đúng ${h.correct}/${h.total}${timeText}</small>
+                </div>
+                <div class="h-actions">
+                    <div class="score-badge ${cls}">${h.score}/10</div>
+                    <button class="h-delete" onclick="deleteHistoryEntry(${h.timestamp || 0})" title="Xóa mục này">🗑️</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// Delete one history entry by timestamp
+function deleteHistoryEntry(timestamp) {
+    if (!timestamp) return;
+    if (!confirm('Xóa mục lịch sử này?')) return;
+    const idx = history.findIndex(h => h.timestamp === timestamp);
+    if (idx === -1) return;
+    history.splice(idx, 1);
+    try { saveHistory(); } catch (e) { console.warn(e); }
+    renderStats();
+    try { showToast('🗑️ Đã xóa mục lịch sử', 'success', 1500); } catch (_) {}
+}
+
+// Clear all history
+function clearAllHistory() {
+    if (!history.length) {
+        try { showToast('Chưa có lịch sử để xóa', 'info', 1500); } catch (_) {}
+        return;
+    }
+    if (!confirm(`Xóa TẤT CẢ ${history.length} mục lịch sử? Hành động này không thể hoàn tác.`)) return;
+    history.length = 0;
+    try { saveHistory(); } catch (e) { console.warn(e); }
+    renderStats();
+    try { showToast('✅ Đã xóa toàn bộ lịch sử', 'success', 1800); } catch (_) {}
+}
+
+// Export history as CSV file
+function exportHistoryCSV() {
+    if (!history.length) {
+        try { showToast('Chưa có lịch sử để xuất', 'info', 1800); } catch (_) {}
+        return;
+    }
+    const esc = (v) => {
+        const s = String(v == null ? '' : v);
+        return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    };
+    const header = ['STT', 'Tên đề', 'Điểm', 'Đúng', 'Tổng', 'Thời gian (giây)', 'Ngày'];
+    const rows = [...history]
+        .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))
+        .map((h, i) => [i + 1, h.quizTitle, h.score, h.correct, h.total, h.timeSpent || 0, h.date || '']);
+    const csv = '\uFEFF' + [header, ...rows].map(r => r.map(esc).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `lich-su-lam-bai-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    try { showToast('📥 Đã xuất CSV', 'success', 1800); } catch (_) {}
+}
+
+// Render per-quiz stats card (top 5 most attempted)
+function renderPerQuizStats() {
+    const el = document.getElementById('perQuizStats');
+    if (!el) return;
+    if (!history.length) {
+        el.innerHTML = `<div class="pq-empty">Chưa có dữ liệu — hãy làm vài đề trước nhé!</div>`;
+        return;
+    }
+    // Aggregate by quizId
+    const map = new Map();
+    for (const h of history) {
+        const key = h.quizId || 0;
+        if (!map.has(key)) {
+            map.set(key, { title: h.quizTitle, attempts: 0, sum: 0, best: 0 });
+        }
+        const o = map.get(key);
+        o.attempts++;
+        o.sum += h.score;
+        if (h.score > o.best) o.best = h.score;
+        o.title = h.quizTitle; // keep latest title
+    }
+    const list = [...map.values()]
+        .sort((a, b) => b.attempts - a.attempts || b.best - a.best)
+        .slice(0, 6);
+    el.innerHTML = list.map(o => `
+        <div class="pq-row">
+            <div class="pq-title" title="${escapeHtml(o.title)}">${escapeHtml(o.title)}</div>
+            <div class="pq-metric">Số lần: <b>${o.attempts}</b></div>
+            <div class="pq-metric">TB: <b>${(o.sum / o.attempts).toFixed(2)}</b></div>
+            <div class="pq-best">🏆 ${o.best.toFixed(2)}</div>
+        </div>
+    `).join('');
+}
+
+// Render time-window stats (today/week/month/all-time)
+function renderTimeWindowStats() {
+    const el = document.getElementById('statsTimeWindow');
+    if (!el) return;
+    const dayMs = 24 * 60 * 60 * 1000;
+    const buckets = [
+        { label: 'Hôm nay', items: countWithin(dayMs), emoji: '☀️' },
+        { label: '7 ngày', items: countWithin(7 * dayMs), emoji: '📅' },
+        { label: '30 ngày', items: countWithin(30 * dayMs), emoji: '🗓️' },
+        { label: 'Tất cả', items: history, emoji: '∞' },
+    ];
+    el.innerHTML = buckets.map(b => {
+        const n = b.items.length;
+        const avg = n ? (b.items.reduce((s, h) => s + h.score, 0) / n).toFixed(2) : '—';
+        return `
+            <div class="tw-card">
+                <div class="tw-num">${b.emoji} ${n}</div>
+                <div class="tw-label">${b.label}</div>
+                <div class="tw-avg">TB: ${avg}</div>
+            </div>
+        `;
+    }).join('');
+}
+
 function renderStats() {
     const total = history.length;
-    const avg = total ? (history.reduce((s,h)=>s+h.score,0)/total).toFixed(2) : 0;
-    const max = total ? Math.max(...history.map(h=>h.score)).toFixed(2) : 0;
-    const uniqueQuizzes = new Set(history.map(h=>h.quizId)).size;
-    
+    const avg = total ? (history.reduce((s, h) => s + h.score, 0) / total).toFixed(2) : '0.00';
+    const max = total ? Math.max(...history.map(h => h.score)).toFixed(2) : '0.00';
+    const uniqueQuizzes = new Set(history.map(h => h.quizId)).size;
+    const streak = computeStreak();
+    const totalTime = history.reduce((s, h) => s + (h.timeSpent || 0), 0);
+    const passRate = total ? Math.round((history.filter(h => h.score >= 5).length / total) * 100) : 0;
+
     document.getElementById('statsOverview').innerHTML = `
-        <div class="stat-card"><div class="num">${total}</div><div class="label">Lượt làm bài</div></div>
-        <div class="stat-card"><div class="num">${avg}</div><div class="label">Điểm trung bình</div></div>
-        <div class="stat-card"><div class="num">${max}</div><div class="label">Điểm cao nhất</div></div>
-        <div class="stat-card"><div class="num">${uniqueQuizzes}</div><div class="label">Đề đã làm</div></div>
+        <div class="stat-card variant-1">
+            <span class="icon">📊</span>
+            <div class="num">${total}</div>
+            <div class="label">Lượt làm bài</div>
+        </div>
+        <div class="stat-card variant-2">
+            <span class="icon">📈</span>
+            <div class="num">${avg}</div>
+            <div class="label">Điểm trung bình</div>
+            <div class="sub">Tỉ lệ đạt: ${passRate}%</div>
+        </div>
+        <div class="stat-card variant-3">
+            <span class="icon">🏆</span>
+            <div class="num">${max}</div>
+            <div class="label">Điểm cao nhất</div>
+        </div>
+        <div class="stat-card variant-4">
+            <span class="icon">🔥</span>
+            <div class="num">${streak}</div>
+            <div class="label">Chuỗi đạt ≥5</div>
+            <div class="sub">(liên tiếp gần nhất)</div>
+        </div>
+        <div class="stat-card variant-5">
+            <span class="icon">📚</span>
+            <div class="num">${uniqueQuizzes}</div>
+            <div class="label">Đề đã làm</div>
+        </div>
+        <div class="stat-card variant-6">
+            <span class="icon">⏱️</span>
+            <div class="num" style="font-size:22px">${formatDuration(totalTime)}</div>
+            <div class="label">Tổng thời gian</div>
+        </div>
     `;
-// Lấy màu theo theme
-const isDark = !document.body.classList.contains('light-mode');
-const gridColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
-const textColor = isDark ? '#e4e6eb' : '#333';
-    
+
+    // Time-window stats
+    renderTimeWindowStats();
+
+    // Lấy màu theo theme
+    const isDark = !document.body.classList.contains('light-mode');
+    const gridColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
+    const textColor = isDark ? '#e4e6eb' : '#333';
+
     // Biểu đồ đường - điểm theo thời gian
     if (scoreChartObj) scoreChartObj.destroy();
     const recent = history.slice(-15);
     scoreChartObj = new Chart(document.getElementById('scoreChart'), {
-    type: 'line',
-    data: {
-        labels: recent.map((_,i)=>`Lần ${history.length-recent.length+i+1}`),
-        datasets: [{ 
-            label: 'Điểm', 
-            data: recent.map(h=>h.score),
-            borderColor: '#7c8cf8', 
-            backgroundColor: 'rgba(124,140,248,0.2)',
-            fill: true, 
-            tension: 0.3,
-            pointBackgroundColor: '#ff6b6b',
-            pointRadius: 5
-        }]
-    },
-    options: { 
-        responsive: true, 
-        scales: { 
-            y: { 
-                min: 0, max: 10, 
-                grid: { color: gridColor },
-                ticks: { color: textColor }
-            },
-            x: {
-                grid: { color: gridColor },
-                ticks: { color: textColor }
-            }
+        type: 'line',
+        data: {
+            labels: recent.map((_, i) => `Lần ${history.length - recent.length + i + 1}`),
+            datasets: [{
+                label: 'Điểm',
+                data: recent.map(h => h.score),
+                borderColor: '#7c8cf8',
+                backgroundColor: 'rgba(124,140,248,0.2)',
+                fill: true,
+                tension: 0.3,
+                pointBackgroundColor: '#ff6b6b',
+                pointRadius: 5
+            }]
         },
-        plugins: { legend: { labels: { color: textColor } } }
-    }
-});
-    
+        options: {
+            responsive: true,
+            scales: {
+                y: { min: 0, max: 10, grid: { color: gridColor }, ticks: { color: textColor } },
+                x: { grid: { color: gridColor }, ticks: { color: textColor } }
+            },
+            plugins: { legend: { labels: { color: textColor } } }
+        }
+    });
+
     // Biểu đồ tròn - phân loại
     if (pieChartObj) pieChartObj.destroy();
-    const cats = { 'Xuất sắc (≥8)':0, 'Khá (6.5-8)':0, 'TB (5-6.5)':0, 'Yếu (<5)':0 };
+    const cats = { 'Xuất sắc (≥8)': 0, 'Khá (6.5-8)': 0, 'TB (5-6.5)': 0, 'Yếu (<5)': 0 };
     history.forEach(h => {
-    if (h.score >= 8) cats['Xuất sắc (≥8)']++;
-    else if (h.score >= 6.5) cats['Khá (6.5-8)']++;
-    else if (h.score >= 5) cats['TB (5-6.5)']++;
-    else cats['Yếu (<5)']++;
-});
-pieChartObj = new Chart(document.getElementById('pieChart'), {
-    type: 'doughnut',
-    data: {
-        labels: Object.keys(cats),
-        datasets: [{ 
-            data: Object.values(cats),
-            backgroundColor: ['#1dd1a1','#54a0ff','#feca57','#ee5253'],
-            borderColor: isDark ? '#1e2530' : '#fff',
-            borderWidth: 2
-        }]
-    },
-    options: { 
-        responsive: true,
-        plugins: { legend: { labels: { color: textColor } } }
-    }
-});
-    
-    // Lịch sử
-    const histList = document.getElementById('historyList');
-    if (history.length === 0) {
-        histList.innerHTML = '<p style="text-align:center;color:#666;padding:30px">Chưa có lịch sử làm bài</p>';
-    } else {
-        histList.innerHTML = [...history].reverse().slice(0, 20).map(h => `
-            <div class="history-item">
-                <div><b>${escapeHtml(h.quizTitle)}</b><br><small>${h.date} • Đúng ${h.correct}/${h.total}</small></div>
-                <div class="score-badge">${h.score}/10</div>
-            </div>
-        `).join('');
+        if (h.score >= 8) cats['Xuất sắc (≥8)']++;
+        else if (h.score >= 6.5) cats['Khá (6.5-8)']++;
+        else if (h.score >= 5) cats['TB (5-6.5)']++;
+        else cats['Yếu (<5)']++;
+    });
+    pieChartObj = new Chart(document.getElementById('pieChart'), {
+        type: 'doughnut',
+        data: {
+            labels: Object.keys(cats),
+            datasets: [{
+                data: Object.values(cats),
+                backgroundColor: ['#1dd1a1', '#54a0ff', '#feca57', '#ee5253'],
+                borderColor: isDark ? '#1e2530' : '#fff',
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { labels: { color: textColor } } }
+        }
+    });
+
+    // Per-quiz stats
+    renderPerQuizStats();
+
+    // History list (with filters)
+    renderHistoryList();
+
+    // Wire filter event listeners (idempotent — bind only once)
+    if (!window.__historyFiltersBound) {
+        const ids = ['historySearch', 'historyScoreFilter', 'historyDateFilter'];
+        ids.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                const evt = el.tagName === 'INPUT' ? 'input' : 'change';
+                el.addEventListener(evt, renderHistoryList);
+            }
+        });
+        window.__historyFiltersBound = true;
     }
 }
 

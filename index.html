@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/192/3976/3976625.png">
 <title>QuizMaster Pro - Tạo Đề Trắc Nghiệm</title>
-<link rel="stylesheet" href="style.css?v=1.4.0">
+<link rel="stylesheet" href="style.css?v=1.5.0">
 <!-- Thư viện đọc file Word (.docx) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 <!-- Thư viện tạo file Word -->
@@ -173,11 +173,43 @@
     <div class="container">
         <h2>📊 Thống Kê Chi Tiết</h2>
         <div id="statsOverview" class="stats-overview"></div>
+
+        <!-- Time-window stats (today / week / month) -->
+        <div id="statsTimeWindow" class="stats-timewindow"></div>
+
         <div class="charts-grid">
             <div class="chart-box"><h3>📈 Điểm theo thời gian</h3><canvas id="scoreChart"></canvas></div>
             <div class="chart-box"><h3>🥧 Phân loại điểm</h3><canvas id="pieChart"></canvas></div>
         </div>
-        <h3 style="margin-top:30px">📜 Lịch sử làm bài</h3>
+
+        <!-- Per-quiz performance -->
+        <div class="chart-box" style="margin-top:20px">
+            <h3>🏅 Hiệu suất theo đề thi</h3>
+            <div id="perQuizStats"></div>
+        </div>
+
+        <!-- History header + toolbar -->
+        <div class="history-header">
+            <h3>📜 Lịch sử làm bài</h3>
+            <div class="history-toolbar">
+                <input type="text" id="historySearch" class="history-search" placeholder="🔍 Tìm theo tên đề...">
+                <select id="historyScoreFilter" class="history-filter">
+                    <option value="all">Tất cả điểm</option>
+                    <option value="excellent">Xuất sắc (≥8)</option>
+                    <option value="good">Khá (6.5-8)</option>
+                    <option value="average">TB (5-6.5)</option>
+                    <option value="weak">Yếu (&lt;5)</option>
+                </select>
+                <select id="historyDateFilter" class="history-filter">
+                    <option value="all">Tất cả thời gian</option>
+                    <option value="today">Hôm nay</option>
+                    <option value="week">7 ngày qua</option>
+                    <option value="month">30 ngày qua</option>
+                </select>
+                <button class="btn-info history-btn" onclick="exportHistoryCSV()" title="Xuất CSV">📥 Xuất CSV</button>
+                <button class="btn-danger history-btn" onclick="clearAllHistory()" title="Xóa tất cả">🗑️ Xóa tất cả</button>
+            </div>
+        </div>
         <div id="historyList"></div>
     </div>
 </section>
@@ -232,7 +264,7 @@
 <!-- Nút phím tắt floating -->
 <button class="shortcut-btn" onclick="document.getElementById('shortcutModal').style.display='block'" title="Phím tắt (?)">⌨️</button>
 
-<script src="questions-data.js?v=1.4.0"></script>
-<script src="script.js?v=1.4.0"></script>
+<script src="questions-data.js?v=1.5.0"></script>
+<script src="script.js?v=1.5.0"></script>
 </body>
 </html>

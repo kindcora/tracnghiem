@@ -1247,17 +1247,47 @@ function submitQuiz() {
     }
 
     // 3) Hiển thị KẾT QUẢ TRƯỚC (rất nhẹ) — đảm bảo user luôn thấy điểm dù review lỗi
+    // ⚠️ BUG FIX (v1.5.1): khai báo `reviewVisible` TRƯỚC khi dùng trong template literal
+    // Trước đây biến được dùng ở dòng button trước khi `let reviewVisible = ...` → ReferenceError (TDZ)
+    // → bị global error handler nuốt mất → người dùng bấm "Nộp bài" thấy KHÔNG có gì hiện ra.
+    const userWantsDetail = (shuffledQuiz && shuffledQuiz.showReviewDetail === false) ? false : true;
+    let reviewVisible = userWantsDetail && (total <= 150);
+    let reviewRendered = false;
+
     const resultEl = document.getElementById('resultContent');
     const emoji = score >= 8 ? '🏆 Xuất sắc!' : score >= 6.5 ? '👍 Khá' : score >= 5 ? '😊 Trung bình' : '💪 Cố gắng thêm!';
+    const scoreClass = score >= 8 ? 'score-excellent' : score >= 6.5 ? 'score-good' : score >= 5 ? 'score-average' : 'score-weak';
+    const percent = Math.round((correct / total) * 100);
+    // v1.5.0 — track time spent for display
+    const timeSpentDisp = window.__quizStartedAt
+        ? Math.max(0, Math.round((Date.now() - window.__quizStartedAt) / 1000))
+        : 0;
+    const minutes = Math.floor(timeSpentDisp / 60);
+    const seconds = timeSpentDisp % 60;
+    const timeStr = minutes > 0 ? `${minutes}p ${seconds}s` : `${seconds}s`;
+
     resultEl.innerHTML = `
-        <div class="result-box">
-            <h3>${score}/10</h3>
-            <p>Đúng ${correct}/${total} câu</p>
-            <p>${emoji}</p>
+        <div class="result-box ${scoreClass}">
+            <div class="result-emoji-big">${score >= 8 ? '🏆' : score >= 6.5 ? '👍' : score >= 5 ? '😊' : '💪'}</div>
+            <h3 class="result-score-big">${score}<span class="result-score-max">/10</span></h3>
+            <p class="result-grade">${emoji.replace(/^[^\s]+\s/, '')}</p>
+            <div class="result-stats-row">
+                <div class="result-stat"><span class="result-stat-icon">✅</span><span class="result-stat-val">${correct}/${total}</span><span class="result-stat-lbl">Câu đúng</span></div>
+                <div class="result-stat"><span class="result-stat-icon">📊</span><span class="result-stat-val">${percent}%</span><span class="result-stat-lbl">Tỉ lệ</span></div>
+                <div class="result-stat"><span class="result-stat-icon">⏱️</span><span class="result-stat-val">${timeStr}</span><span class="result-stat-lbl">Thời gian</span></div>
+            </div>
+            <div class="result-progress-ring">
+                <div class="result-progress-bar"><div class="result-progress-fill" style="width:${percent}%"></div></div>
+            </div>
         </div>
-        <div style="margin:20px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-            <h3 style="margin:0">📖 Chi tiết:</h3>
-            <button id="toggleReviewBtn" class="btn-secondary" style="padding:6px 12px;font-size:14px">${reviewVisible ? '🙈 Ẩn chi tiết' : '👁️ Hiện chi tiết'}</button>
+        <div class="result-actions">
+            <button class="btn-primary" onclick="if(currentQuiz){startQuiz(currentQuiz.id)}">🔁 Làm lại</button>
+            <button class="btn-secondary" onclick="showSection('quizzes')">📚 Danh sách đề</button>
+            <button class="btn-info" onclick="showSection('stats')">📊 Xem thống kê</button>
+        </div>
+        <div class="review-header-bar">
+            <h3 style="margin:0">📖 Chi tiết câu trả lời</h3>
+            <button id="toggleReviewBtn" class="btn-secondary" style="padding:8px 14px;font-size:14px;width:auto">${reviewVisible ? '🙈 Ẩn chi tiết' : '👁️ Hiện chi tiết'}</button>
         </div>
         <div id="reviewContainer"></div>
     `;
@@ -1269,10 +1299,6 @@ function submitQuiz() {
     // 4) Lazy render review theo CHUNK — tránh crash WebView khi đề lớn
     const reviewContainer = document.getElementById('reviewContainer');
     const toggleBtn = document.getElementById('toggleReviewBtn');
-    let reviewRendered = false;
-    // Tùy chọn từ modal tùy chỉnh: showReviewDetail (mặc định true). Đề >150 câu vẫn ẩn để tránh crash WebView; người dùng có thể bấm nút để hiện.
-    const userWantsDetail = (shuffledQuiz && shuffledQuiz.showReviewDetail === false) ? false : true;
-    let reviewVisible = userWantsDetail && (total <= 150);
 
     function buildItemHTML(q, i) {
         try {

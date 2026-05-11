@@ -1247,12 +1247,12 @@ function submitQuiz() {
     }
 
     // 3) Hiển thị KẾT QUẢ TRƯỚC (rất nhẹ) — đảm bảo user luôn thấy điểm dù review lỗi
-    // ⚠️ BUG FIX (v1.5.1): khai báo `reviewVisible` TRƯỚC khi dùng trong template literal
-    // Trước đây biến được dùng ở dòng button trước khi `let reviewVisible = ...` → ReferenceError (TDZ)
-    // → bị global error handler nuốt mất → người dùng bấm "Nộp bài" thấy KHÔNG có gì hiện ra.
-    const userWantsDetail = (shuffledQuiz && shuffledQuiz.showReviewDetail === false) ? false : true;
-    let reviewVisible = userWantsDetail && (total <= 150);
-    let reviewRendered = false;
+    // ⚠️ BUG FIX (v1.5.2): dùng `var` thay vì `let` để TRÁNH HOÀN TOÀN TDZ (Temporal Dead Zone)
+    // Một số WebView (Zalo, cũ) có bug khiến `let` ném ReferenceError dù khai báo ở trên cùng scope.
+    // `var` được hoisted với undefined → an toàn tuyệt đối.
+    var userWantsDetail = (shuffledQuiz && shuffledQuiz.showReviewDetail === false) ? false : true;
+    var reviewVisible = userWantsDetail && (total <= 150);
+    var reviewRendered = false;
 
     const resultEl = document.getElementById('resultContent');
     const emoji = score >= 8 ? '🏆 Xuất sắc!' : score >= 6.5 ? '👍 Khá' : score >= 5 ? '😊 Trung bình' : '💪 Cố gắng thêm!';

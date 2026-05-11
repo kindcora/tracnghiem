@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+<meta name="theme-color" content="#0f1419">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/192/3976/3976625.png">
+<title>QuizMaster Pro - Tạo Đề Trắc Nghiệm</title>
+<link rel="stylesheet" href="style.css">
+<!-- Thư viện đọc file Word (.docx) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<!-- Thư viện tạo file Word -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/docx/8.5.0/docx.umd.min.js"></script>
+<!-- Thư viện vẽ biểu đồ -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<!-- Dữ liệu đề ôn tập đã gộp (auto-generated) -->
+<script src="questions-data.js"></script>
+</head>
+<body>
+    <!-- Particles background -->
+<!-- Trạng thái Online/Offline -->
+<div id="connectionStatus" class="connection-status"></div>
+
+<!-- Banner cài đặt PWA -->
+<div id="installBanner" class="install-banner">
+    <span>📱 Cài đặt QuizMaster lên thiết bị để dùng offline!</span>
+    <button onclick="installPWA()" class="btn-primary" style="padding:8px 16px;margin:0 5px;width:auto">Cài đặt</button>
+    <button onclick="dismissInstall()" class="btn-danger" style="padding:8px 12px;margin:0;width:auto">✕</button>
+</div>
+<div class="particles" id="particles"></div>
+<header class="header">
+    <div class="container">
+        <div class="logo">📚 QuizMaster <span class="pro-badge">PRO</span></div>
+        <button class="hamburger" id="hamburger" onclick="toggleMobileMenu()" aria-label="Menu">☰</button>
+        <nav id="mainNav">
+            <button class="nav-btn active" onclick="showSection('home', event)">🏠 Trang chủ</button>
+            <button class="nav-btn" onclick="showSection('create', event)">➕ Tạo đề</button>
+            <button class="nav-btn" onclick="showSection('list', event)">📋 Danh sách</button>
+            <button class="nav-btn" onclick="showSection('stats', event)">📊 Thống kê</button>
+            <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Chuyển chế độ sáng/tối">🌙</button>
+        </nav>
+    </div>
+</header>
+<div class="mobile-menu-overlay" id="menuOverlay" onclick="toggleMobileMenu()"></div>
+
+<!-- Trang chủ -->
+<section id="home" class="section active">
+    <div class="container">
+        <div class="hero">
+            <h1>QuizMaster Pro 🎓</h1>
+            <p>Tạo đề trắc nghiệm chuyên nghiệp - Nhập/Xuất CSV, Word - Thống kê chi tiết</p>
+            <button class="btn-primary" onclick="showSection('create')">🚀 Bắt đầu</button>
+            <button class="btn-secondary" onclick="startPreloadedQuiz()" style="margin-left:10px">📚 Ôn tập ngay (Bộ đề 2026)</button>
+        </div>
+        <div id="preloadedBanner" style="max-width:800px;margin:20px auto;padding:16px 20px;background:linear-gradient(135deg,#7c8cf8,#5b6ef0);color:#fff;border-radius:12px;text-align:center;box-shadow:0 4px 20px rgba(124,140,248,0.4)">
+            <h3 style="margin:0 0 8px 0">📚 Bộ đề ôn tập tổng hợp 2026</h3>
+            <p style="margin:0 0 12px 0;opacity:0.95">Văn hóa doanh nghiệp + Nâng giữ bậc nghề Kinh doanh — <b>450 câu hỏi</b> đã được tổng hợp & lọc trùng</p>
+            <button class="btn-primary" onclick="startPreloadedQuiz()" style="background:#fff;color:#5b6ef0;width:auto;padding:10px 24px">▶️ Bắt đầu ôn tập</button>
+        </div>
+        <div class="features">
+            <div class="feature-card"><div class="icon">📥</div><h3>Nhập từ CSV/Word</h3><p>Import hàng loạt câu hỏi nhanh chóng</p></div>
+            <div class="feature-card"><div class="icon">📤</div><h3>Xuất đề thi</h3><p>Xuất ra file CSV hoặc Word đẹp mắt</p></div>
+            <div class="feature-card"><div class="icon">🎲</div><h3>Trộn câu hỏi</h3><p>Trộn ngẫu nhiên câu hỏi và đáp án</p></div>
+            <div class="feature-card"><div class="icon">📊</div><h3>Thống kê chi tiết</h3><p>Biểu đồ tiến độ học tập theo thời gian</p></div>
+        </div>
+    </div>
+</section>
+
+<!-- Tạo đề -->
+<section id="create" class="section">
+    <div class="container">
+        <h2>➕ Tạo Đề Trắc Nghiệm</h2>
+        
+        <div class="import-box">
+            <h3>📥 Nhập câu hỏi từ file</h3>
+            <div class="import-buttons">
+                <label class="btn-secondary">
+                    📄 Nhập CSV
+                    <input type="file" accept=".csv" onchange="importCSV(event)" hidden>
+                </label>
+                <label class="btn-secondary">
+                    📝 Nhập Word (.docx)
+                    <input type="file" accept=".docx" onchange="importWord(event)" hidden>
+                </label>
+                <button class="btn-info" onclick="downloadTemplate()">📋 Tải mẫu CSV</button>
+                <button class="btn-info" onclick="showFormatGuide()">❓ Hướng dẫn định dạng</button>
+            </div>
+        </div>
+
+        <div class="form-group"><label>Tên đề thi:</label>
+            <input type="text" id="quizTitle" placeholder="VD: Ôn tập Toán lớp 10"></div>
+        <div class="form-group"><label>Mô tả:</label>
+            <textarea id="quizDesc" placeholder="Mô tả ngắn..."></textarea></div>
+        <div class="form-row">
+            <div class="form-group"><label>Thời gian (phút):</label>
+                <input type="number" id="quizTime" value="15" min="1"></div>
+            <div class="form-group"><label>Trộn câu hỏi:</label>
+                <select id="shuffleQuestions"><option value="false">Không</option><option value="true">Có</option></select></div>
+            <div class="form-group"><label>Trộn đáp án:</label>
+                <select id="shuffleOptions"><option value="false">Không</option><option value="true">Có</option></select></div>
+        </div>
+
+        <div id="questionsContainer"></div>
+
+        <div class="action-buttons">
+            <button class="btn-secondary" onclick="addQuestion()">➕ Thêm câu hỏi</button>
+            <button class="btn-primary" onclick="saveQuiz()">💾 Lưu đề thi</button>
+            <button class="btn-danger" onclick="clearAll()">🗑️ Xóa tất cả</button>
+        </div>
+    </div>
+</section>
+
+<!-- Danh sách đề -->
+<section id="list" class="section">
+    <div class="container">
+        <h2>📋 Danh Sách Đề Thi</h2>
+        <input type="text" id="searchQuiz" placeholder="🔍 Tìm kiếm đề thi..." oninput="renderQuizList()" style="margin-bottom:20px;padding:12px;width:100%;border:2px solid #e0e0e0;border-radius:8px;">
+        <div id="quizList" class="quiz-list"></div>
+    </div>
+</section>
+
+<!-- Làm bài -->
+<section id="doQuiz" class="section">
+    <div class="container">
+        <div class="quiz-header">
+            <h2 id="doQuizTitle"></h2>
+            <div class="timer">⏱️ <span id="timer">00:00</span></div>
+        </div>
+        <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
+        <div id="doQuizContent"></div>
+        <button class="btn-primary" onclick="submitQuiz()">✅ Nộp bài</button>
+
+        <!-- Tab nhỏ trạng thái câu hỏi (floating panel) -->
+        <div id="questionStatusPanel" class="question-status-panel">
+            <div class="qsp-header" onclick="toggleQuestionStatusPanel()">
+                <span class="qsp-title">📋 Trạng thái</span>
+                <span class="qsp-summary">
+                    <span class="qsp-stat qsp-stat-correct" title="Số câu đúng">✓ <span id="qspCorrect">0</span></span>
+                    <span class="qsp-stat qsp-stat-wrong" title="Số câu sai">✗ <span id="qspWrong">0</span></span>
+                    <span class="qsp-stat qsp-stat-total" title="Đã làm / Tổng"><span id="qspDone">0</span>/<span id="qspTotal">0</span></span>
+                </span>
+                <button class="qsp-toggle" id="qspToggleBtn" title="Thu gọn/Mở rộng" onclick="event.stopPropagation()">▼</button>
+            </div>
+            <div class="qsp-body" id="qspBody">
+                <div class="qsp-live-toggle">
+                    <label title="Bật để xem ngay câu đúng/sai khi đang làm bài">
+                        <input type="checkbox" id="qspLiveCheck" onchange="toggleLiveTracking()">
+                        <span>🔴 Live: Hiện đúng/sai ngay khi chọn</span>
+                    </label>
+                </div>
+                <div class="qsp-legend">
+                    <span class="legend-live-only"><i class="dot correct"></i> Đúng</span>
+                    <span class="legend-live-only"><i class="dot wrong"></i> Sai</span>
+                    <span><i class="dot answered"></i> Đã làm</span>
+                    <span><i class="dot empty"></i> Bỏ trống</span>
+                </div>
+                <div id="qspGrid" class="qsp-grid"></div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Kết quả -->
+<section id="result" class="section">
+    <div class="container">
+        <h2>🏆 Kết Quả</h2>
+        <div id="resultContent"></div>
+        <button class="btn-primary" onclick="showSection('list')">📋 Về danh sách</button>
+        <button class="btn-secondary" onclick="showSection('stats')">📊 Xem thống kê</button>
+    </div>
+</section>
+
+<!-- Thống kê -->
+<section id="stats" class="section">
+    <div class="container">
+        <h2>📊 Thống Kê Chi Tiết</h2>
+        <div id="statsOverview" class="stats-overview"></div>
+        <div class="charts-grid">
+            <div class="chart-box"><h3>📈 Điểm theo thời gian</h3><canvas id="scoreChart"></canvas></div>
+            <div class="chart-box"><h3>🥧 Phân loại điểm</h3><canvas id="pieChart"></canvas></div>
+        </div>
+        <h3 style="margin-top:30px">📜 Lịch sử làm bài</h3>
+        <div id="historyList"></div>
+    </div>
+</section>
+
+<!-- Modal hướng dẫn -->
+<div id="modal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="document.getElementById('modal').style.display='none'">&times;</span>
+        <div id="modalContent"></div>
+    </div>
+</div>
+<!-- Modal hiển thị phím tắt -->
+<div id="shortcutModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="document.getElementById('shortcutModal').style.display='none'">&times;</span>
+        <h2>⌨️ Phím Tắt</h2>
+        
+        <h3>🌐 Toàn trang:</h3>
+        <table class="shortcut-table">
+            <tr><td><kbd>?</kbd> hoặc <kbd>Shift</kbd>+<kbd>/</kbd></td><td>Hiện bảng phím tắt này</td></tr>
+            <tr><td><kbd>Alt</kbd>+<kbd>1</kbd></td><td>Trang chủ</td></tr>
+            <tr><td><kbd>Alt</kbd>+<kbd>2</kbd></td><td>Tạo đề</td></tr>
+            <tr><td><kbd>Alt</kbd>+<kbd>3</kbd></td><td>Danh sách đề</td></tr>
+            <tr><td><kbd>Alt</kbd>+<kbd>4</kbd></td><td>Thống kê</td></tr>
+            <tr><td><kbd>Alt</kbd>+<kbd>D</kbd></td><td>Chuyển sáng/tối</td></tr>
+            <tr><td><kbd>Esc</kbd></td><td>Đóng modal/menu</td></tr>
+        </table>
+        
+        <h3>✏️ Khi tạo đề:</h3>
+        <table class="shortcut-table">
+            <tr><td><kbd>Ctrl</kbd>+<kbd>N</kbd></td><td>Thêm câu hỏi mới</td></tr>
+            <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>Lưu đề thi</td></tr>
+            <tr><td><kbd>Ctrl</kbd>+<kbd>Delete</kbd></td><td>Xóa tất cả</td></tr>
+        </table>
+        
+        <h3>🎯 Khi làm bài:</h3>
+        <table class="shortcut-table">
+            <tr><td><kbd>A</kbd> / <kbd>B</kbd> / <kbd>C</kbd> / <kbd>D</kbd></td><td>Chọn đáp án</td></tr>
+            <tr><td><kbd>1</kbd> / <kbd>2</kbd> / <kbd>3</kbd> / <kbd>4</kbd></td><td>Chọn đáp án (số)</td></tr>
+            <tr><td><kbd>↑</kbd> / <kbd>↓</kbd></td><td>Câu trước / Câu sau</td></tr>
+            <tr><td><kbd>←</kbd> / <kbd>→</kbd></td><td>Câu trước / Câu sau</td></tr>
+            <tr><td><kbd>Enter</kbd></td><td>Nộp bài (khi đã làm hết)</td></tr>
+            <tr><td><kbd>Ctrl</kbd>+<kbd>Enter</kbd></td><td>Nộp bài ngay</td></tr>
+        </table>
+        
+        <p style="margin-top:20px;padding:12px;background:rgba(124,140,248,0.1);border-radius:8px;text-align:center">
+            💡 <b>Mẹo:</b> Bấm <kbd>?</kbd> bất kỳ lúc nào để mở lại bảng này
+        </p>
+    </div>
+</div>
+
+<!-- Nút phím tắt floating -->
+<button class="shortcut-btn" onclick="document.getElementById('shortcutModal').style.display='block'" title="Phím tắt (?)">⌨️</button>
+
+<script src="script.js"></script>
+</body>
+</html>

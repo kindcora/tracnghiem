@@ -623,6 +623,33 @@ body.light-mode .hero h1 {
     -webkit-text-fill-color: transparent;
 }
 
+/* === OLED MODE (v1.6.1) - true black for AMOLED displays (battery saving) === */
+body.oled-mode {
+    --bg-main: #000000;
+    --bg-gradient: linear-gradient(135deg, #000000 0%, #0a0a0a 100%);
+    --bg-card: #050505;
+    --bg-card-2: #0a0a0a;
+    --bg-input: #000000;
+    --bg-hover: #111111;
+    --text-main: #f0f0f0;
+    --text-secondary: #b0b0b0;
+    --text-muted: #808080;
+    --border: #1a1a1a;
+    --shadow: 0 4px 15px rgba(0,0,0,0.8);
+}
+body.oled-mode {
+    background: #000000 !important;
+}
+body.oled-mode .particle { background: rgba(255,255,255,0.15); }
+body.oled-mode header,
+body.oled-mode .modal-content,
+body.oled-mode .quiz-item,
+body.oled-mode .stat-card,
+body.oled-mode .history-item {
+    background: #050505 !important;
+    border: 1px solid #1a1a1a;
+}
+
 /* === SCROLLBAR === */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: var(--bg-main); }

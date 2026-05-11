@@ -80,12 +80,41 @@ function saveHistory() {
     try {
         // Keep only last 50 entries to limit storage
         const trimmed = history.length > 50 ? history.slice(-50) : history;
+        // v1.6.1 — invalidate memoized stats whenever history changes
+        try { invalidateStatsCache(); } catch (_) {}
         return safeSetItem('history', trimmed);
     } catch (e) {
         console.warn('[saveHistory] failed:', e);
         return false;
     }
 }
+// ============================================
+// 🔧 GENERIC UTILITIES (v1.6.1)
+// ============================================
+
+// Debounce: delay calling fn until `ms` milliseconds have passed without a new call.
+// Useful for search inputs to avoid re-rendering on every keystroke.
+function debounce(fn, ms) {
+    let timer = null;
+    return function debounced(...args) {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => {
+            timer = null;
+            try { fn.apply(this, args); } catch (e) { console.warn('[debounce] fn error:', e); }
+        }, ms);
+    };
+}
+
+// Stats memoization cache — invalidated whenever history mutates.
+// Use invalidateStatsCache() after any push/splice/clear on `history`.
+const __statsCache = { overview: null, perQuiz: null, timeWindow: null };
+function invalidateStatsCache() {
+    __statsCache.overview = null;
+    __statsCache.perQuiz = null;
+    __statsCache.timeWindow = null;
+}
+
+
 // ============================================
 // 📡 OFFLINE MODE - SERVICE WORKER & PWA
 // ============================================
@@ -506,14 +535,21 @@ function jumpToQuestion(index) {
 
     updateQuestionStatusPanel();
 }
-// ============= THEME TOGGLE (3 MODES: LIGHT / DARK / AUTO) =============
-// v1.6.0 — Cycle through 3 modes & respect system preference for AUTO
-const THEME_ORDER = ['dark', 'light', 'auto'];
-const THEME_ICON = { dark: '🌙', light: '☀️', auto: '🌓' };
+// ============= THEME TOGGLE (4 MODES: LIGHT / DARK / OLED / AUTO) =============
+// v1.6.1 — Added OLED true-black mode for AMOLED displays (saves battery)
+const THEME_ORDER = ['dark', 'light', 'oled', 'auto'];
+const THEME_ICON = { dark: '🌙', light: '☀️', oled: '⚫', auto: '🌓' };
 const THEME_LABEL = {
     dark: 'Chế độ tối (bấm: sáng)',
-    light: 'Chế độ sáng (bấm: tự động)',
+    light: 'Chế độ sáng (bấm: OLED đen)',
+    oled: 'Chế độ OLED đen tuyệt đối (bấm: tự động)',
     auto: 'Tự động theo hệ thống (bấm: tối)'
+};
+const THEME_TOAST_LABEL = {
+    dark: '🌙 Tối',
+    light: '☀️ Sáng',
+    oled: '⚫ OLED đen',
+    auto: '🌓 Tự động'
 };
 
 function getSystemPrefersDark() {
@@ -524,6 +560,7 @@ function applyTheme(mode) {
     let effective = mode;
     if (mode === 'auto') effective = getSystemPrefersDark() ? 'dark' : 'light';
     document.body.classList.toggle('light-mode', effective === 'light');
+    document.body.classList.toggle('oled-mode', effective === 'oled');
     document.body.setAttribute('data-theme-mode', mode);
     const btn = document.getElementById('themeToggle');
     if (btn) {
@@ -547,7 +584,7 @@ function toggleTheme() {
     const idx = THEME_ORDER.indexOf(current);
     const next = THEME_ORDER[(idx + 1) % THEME_ORDER.length];
     setTheme(next);
-    showToast(`Chế độ: ${next === 'dark' ? '🌙 Tối' : next === 'light' ? '☀️ Sáng' : '🌓 Tự động'}`, 'success', 1500);
+    showToast(`Chế độ: ${THEME_TOAST_LABEL[next] || next}`, 'success', 1500);
 }
 // ============= HIỆU ỨNG PARTICLE BACKGROUND =============
 function createParticles() {
@@ -845,6 +882,24 @@ function escapeHtml(text) {
     return String(text || '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 }
 
+// ============= DEBOUNCE HELPER (v1.6.1) =============
+// Generic debounce: delays calling fn until ms has passed since last call.
+// Useful for input handlers to avoid heavy renders on every keystroke.
+function debounce(fn, ms = 300) {
+    let timer = null;
+    return function debounced(...args) {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => {
+            timer = null;
+            try { fn.apply(this, args); } catch (e) { console.error('[debounce]', e); }
+        }, ms);
+    };
+}
+
+// Debounced renderers — exposed on window for inline `oninput` handlers
+window.renderQuizListDebounced = null;  // assigned in DOMContentLoaded
+window.renderHistoryListDebounced = null;
+
 // ============= LƯU ĐỀ =============
 function saveQuiz() {
     const title = document.getElementById('quizTitle').value.trim();
@@ -927,8 +982,10 @@ function renderQuizList() {
         list.innerHTML = '<p style="text-align:center;color:#666;padding:40px;">Không có đề thi nào.</p>';
         return;
     }
+    // v1.6.1 — Event delegation: replace 7 inline onclicks per card with
+    // data-action attributes + 1 delegated container listener (see below).
     list.innerHTML = filtered.map(q => `
-        <div class="quiz-item">
+        <div class="quiz-item" data-quiz-id="${q.id}">
             <h3>${escapeHtml(q.title)}</h3>
             <p>${escapeHtml(q.desc || 'Không có mô tả')}</p>
             <div class="meta">
@@ -936,16 +993,39 @@ function renderQuizList() {
                 <span>⏱️ ${q.time} phút</span>
             </div>
             <div class="btn-group">
-                <button class="btn-primary" onclick="startQuiz(${q.id})">▶️ Làm bài</button>
-                <button class="btn-success" onclick="startPractice(${q.id})" title="Luyện tập với phản hồi tức thì">📖 Luyện tập</button>
-                <button class="btn-warning" onclick="startFlashcard(${q.id})" title="Học bằng flashcard">🃏 Flashcard</button>
-                <button class="btn-secondary" onclick="customizeQuiz(${q.id})">⚙️ Tùy chỉnh</button>
-                <button class="btn-info" onclick="exportCSV(${q.id})">📄 CSV</button>
-                <button class="btn-info" onclick="exportWord(${q.id})">📝 Word</button>
-                <button class="btn-danger" onclick="deleteQuiz(${q.id})">🗑️</button>
+                <button class="btn-primary" data-action="start">▶️ Làm bài</button>
+                <button class="btn-success" data-action="practice" title="Luyện tập với phản hồi tức thì">📖 Luyện tập</button>
+                <button class="btn-warning" data-action="flashcard" title="Học bằng flashcard">🃏 Flashcard</button>
+                <button class="btn-secondary" data-action="customize">⚙️ Tùy chỉnh</button>
+                <button class="btn-info" data-action="csv">📄 CSV</button>
+                <button class="btn-info" data-action="word">📝 Word</button>
+                <button class="btn-danger" data-action="delete">🗑️</button>
             </div>
         </div>
     `).join('');
+
+    // Bind delegated handler ONCE per #quizList lifetime (idempotent).
+    if (!list.__delegatedBound) {
+        list.addEventListener('click', (ev) => {
+            const btn = ev.target.closest('button[data-action]');
+            if (!btn) return;
+            const card = btn.closest('.quiz-item[data-quiz-id]');
+            if (!card) return;
+            const id = parseInt(card.getAttribute('data-quiz-id'), 10);
+            if (isNaN(id)) return;
+            const action = btn.getAttribute('data-action');
+            switch (action) {
+                case 'start':     return startQuiz(id);
+                case 'practice':  return startPractice(id);
+                case 'flashcard': return startFlashcard(id);
+                case 'customize': return customizeQuiz(id);
+                case 'csv':       return exportCSV(id);
+                case 'word':      return exportWord(id);
+                case 'delete':    return deleteQuiz(id);
+            }
+        });
+        list.__delegatedBound = true;
+    }
 }
 
 function deleteQuiz(id) {
@@ -1244,72 +1324,49 @@ function updateProgress() {
     updateQuestionStatusPanel();
 }
 
-function submitQuiz() {
-    try {
-        clearInterval(timerInterval);
-        timerInterval = null;
-    } catch (e) {}
-    try { hideQuestionStatusPanel(); } catch (e) {}
+// ============= submitQuiz HELPERS (v1.6.1 refactor) =============
+// Split into 4 helpers for clarity & testability. All keep the same
+// defensive try/catch + WebView-safe semantics as the original code.
 
-    if (!shuffledQuiz || !shuffledQuiz.questions || shuffledQuiz.questions.length === 0) {
-        showToast && showToast('Không có dữ liệu bài làm!', 'error');
-        return;
-    }
-
-    const questions = shuffledQuiz.questions;
+// (1) Collect answers + count correct in a single pass.
+function _collectQuizAnswers(questions, answers) {
     const total = questions.length;
-
-    // 1) Tính điểm NHANH — không build HTML để tránh crash bộ nhớ trên WebView Zalo
     let correct = 0;
     for (let i = 0; i < total; i++) {
-        if (userAnswers[i] === questions[i].correct) correct++;
+        if (answers[i] === questions[i].correct) correct++;
     }
+    return { total, correct };
+}
+
+// (2) Compute score (0–10), percent, grade label/emoji/CSS class.
+function _calculateQuizScore(correct, total) {
     const score = ((correct / total) * 10).toFixed(2);
-
-    // 2) Lưu lịch sử (try/catch phòng localStorage đầy)
-    try {
-        // v1.5.0 — track time spent (in seconds) for stats
-        const timeSpent = window.__quizStartedAt
-            ? Math.max(0, Math.round((Date.now() - window.__quizStartedAt) / 1000))
-            : 0;
-        history.push({
-            quizId: currentQuiz ? currentQuiz.id : 0,
-            quizTitle: currentQuiz ? currentQuiz.title : '(Không tên)',
-            score: parseFloat(score), correct, total,
-            date: new Date().toLocaleString('vi-VN'),
-            timestamp: Date.now(),
-            timeSpent: timeSpent
-        });
-        saveHistory();
-    } catch (e) {
-        console.warn('Không lưu được lịch sử:', e);
-    }
-
-    // 3) Hiển thị KẾT QUẢ TRƯỚC (rất nhẹ) — đảm bảo user luôn thấy điểm dù review lỗi
-    // ⚠️ BUG FIX (v1.5.2): dùng `var` thay vì `let` để TRÁNH HOÀN TOÀN TDZ (Temporal Dead Zone)
-    // Một số WebView (Zalo, cũ) có bug khiến `let` ném ReferenceError dù khai báo ở trên cùng scope.
-    // `var` được hoisted với undefined → an toàn tuyệt đối.
-    var userWantsDetail = (shuffledQuiz && shuffledQuiz.showReviewDetail === false) ? false : true;
-    var reviewVisible = userWantsDetail && (total <= 150);
-    var reviewRendered = false;
-
-    const resultEl = document.getElementById('resultContent');
-    const emoji = score >= 8 ? '🏆 Xuất sắc!' : score >= 6.5 ? '👍 Khá' : score >= 5 ? '😊 Trung bình' : '💪 Cố gắng thêm!';
-    const scoreClass = score >= 8 ? 'score-excellent' : score >= 6.5 ? 'score-good' : score >= 5 ? 'score-average' : 'score-weak';
     const percent = Math.round((correct / total) * 100);
-    // v1.5.0 — track time spent for display
-    const timeSpentDisp = window.__quizStartedAt
-        ? Math.max(0, Math.round((Date.now() - window.__quizStartedAt) / 1000))
-        : 0;
-    const minutes = Math.floor(timeSpentDisp / 60);
-    const seconds = timeSpentDisp % 60;
-    const timeStr = minutes > 0 ? `${minutes}p ${seconds}s` : `${seconds}s`;
+    const scoreNum = parseFloat(score);
+    const grade = scoreNum >= 8 ? 'excellent'
+        : scoreNum >= 6.5 ? 'good'
+        : scoreNum >= 5 ? 'average'
+        : 'weak';
+    const emoji = grade === 'excellent' ? '🏆'
+        : grade === 'good' ? '👍'
+        : grade === 'average' ? '😊'
+        : '💪';
+    const label = grade === 'excellent' ? 'Xuất sắc!'
+        : grade === 'good' ? 'Khá'
+        : grade === 'average' ? 'Trung bình'
+        : 'Cố gắng thêm!';
+    const scoreClass = 'score-' + grade;
+    return { score, scoreNum, percent, grade, emoji, label, scoreClass };
+}
 
-    resultEl.innerHTML = `
+// (3) Build the result HTML shown to the user (top score box + review header).
+function _buildResultHtml(scoreInfo, correct, total, timeStr, reviewVisible) {
+    const { score, percent, emoji, label, scoreClass } = scoreInfo;
+    return `
         <div class="result-box ${scoreClass}">
-            <div class="result-emoji-big">${score >= 8 ? '🏆' : score >= 6.5 ? '👍' : score >= 5 ? '😊' : '💪'}</div>
+            <div class="result-emoji-big">${emoji}</div>
             <h3 class="result-score-big">${score}<span class="result-score-max">/10</span></h3>
-            <p class="result-grade">${emoji.replace(/^[^\s]+\s/, '')}</p>
+            <p class="result-grade">${label}</p>
             <div class="result-stats-row">
                 <div class="result-stat"><span class="result-stat-icon">✅</span><span class="result-stat-val">${correct}/${total}</span><span class="result-stat-lbl">Câu đúng</span></div>
                 <div class="result-stat"><span class="result-stat-icon">📊</span><span class="result-stat-val">${percent}%</span><span class="result-stat-lbl">Tỉ lệ</span></div>
@@ -1330,6 +1387,69 @@ function submitQuiz() {
         </div>
         <div id="reviewContainer"></div>
     `;
+}
+
+// (4) Persist the attempt into history (safe against localStorage quota).
+// Also invalidates the stats memo cache (v1.6.1).
+function _saveQuizHistory(score, correct, total) {
+    try {
+        const timeSpent = window.__quizStartedAt
+            ? Math.max(0, Math.round((Date.now() - window.__quizStartedAt) / 1000))
+            : 0;
+        history.push({
+            quizId: currentQuiz ? currentQuiz.id : 0,
+            quizTitle: currentQuiz ? currentQuiz.title : '(Không tên)',
+            score: parseFloat(score), correct, total,
+            date: new Date().toLocaleString('vi-VN'),
+            timestamp: Date.now(),
+            timeSpent: timeSpent
+        });
+        saveHistory();
+        // Invalidate memoized stats (v1.6.1)
+        if (typeof invalidateStatsCache === 'function') invalidateStatsCache();
+        return timeSpent;
+    } catch (e) {
+        console.warn('Không lưu được lịch sử:', e);
+        return 0;
+    }
+}
+
+function submitQuiz() {
+    try {
+        clearInterval(timerInterval);
+        timerInterval = null;
+    } catch (e) {}
+    try { hideQuestionStatusPanel(); } catch (e) {}
+
+    if (!shuffledQuiz || !shuffledQuiz.questions || shuffledQuiz.questions.length === 0) {
+        showToast && showToast('Không có dữ liệu bài làm!', 'error');
+        return;
+    }
+
+    const questions = shuffledQuiz.questions;
+
+    // 1) Collect answers + count correct (fast — no HTML to avoid Zalo WebView OOM)
+    const { total, correct } = _collectQuizAnswers(questions, userAnswers);
+
+    // 2) Calculate score + grade meta
+    const scoreInfo = _calculateQuizScore(correct, total);
+    const score = scoreInfo.score;
+
+    // 3) Save history (defensive against localStorage quota)
+    const timeSpentDisp = _saveQuizHistory(score, correct, total);
+
+    // 4) Show result UI first (lightweight) — guarantees user sees score even if review fails
+    // ⚠️ BUG FIX (v1.5.2): use `var` to avoid TDZ on buggy WebView (Zalo) where `let` may throw ReferenceError.
+    var userWantsDetail = (shuffledQuiz && shuffledQuiz.showReviewDetail === false) ? false : true;
+    var reviewVisible = userWantsDetail && (total <= 150);
+    var reviewRendered = false;
+
+    const resultEl = document.getElementById('resultContent');
+    const minutes = Math.floor(timeSpentDisp / 60);
+    const seconds = timeSpentDisp % 60;
+    const timeStr = minutes > 0 ? `${minutes}p ${seconds}s` : `${seconds}s`;
+
+    resultEl.innerHTML = _buildResultHtml(scoreInfo, correct, total, timeStr, reviewVisible);
 
     document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
     document.getElementById('result').classList.add('active');
@@ -1717,22 +1837,37 @@ function renderHistoryList() {
     }
     // Newest first, capped at 50 entries for performance
     const display = [...filtered].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)).slice(0, 50);
+    // v1.6.1 — Event delegation: replace per-row onclick with data-ts + 1 listener.
     histList.innerHTML = display.map(h => {
         const cls = scoreClass(h.score);
         const timeText = h.timeSpent ? ` • ⏱️ ${formatDuration(h.timeSpent)}` : '';
         return `
-            <div class="history-item left-${cls}">
+            <div class="history-item left-${cls}" data-ts="${h.timestamp || 0}">
                 <div class="h-info">
                     <b>${escapeHtml(h.quizTitle)}</b>
                     <small>${escapeHtml(h.date || '')} • Đúng ${h.correct}/${h.total}${timeText}</small>
                 </div>
                 <div class="h-actions">
                     <div class="score-badge ${cls}">${h.score}/10</div>
-                    <button class="h-delete" onclick="deleteHistoryEntry(${h.timestamp || 0})" title="Xóa mục này">🗑️</button>
+                    <button class="h-delete" data-action="delete" title="Xóa mục này">🗑️</button>
                 </div>
             </div>
         `;
     }).join('');
+
+    // Bind delegated handler ONCE per #historyList lifetime (idempotent).
+    if (!histList.__delegatedBound) {
+        histList.addEventListener('click', (ev) => {
+            const btn = ev.target.closest('button[data-action="delete"]');
+            if (!btn) return;
+            const row = btn.closest('.history-item[data-ts]');
+            if (!row) return;
+            const ts = parseInt(row.getAttribute('data-ts'), 10);
+            if (!ts) return;
+            deleteHistoryEntry(ts);
+        });
+        histList.__delegatedBound = true;
+    }
 }
 
 // Delete one history entry by timestamp
@@ -1756,6 +1891,8 @@ function clearAllHistory() {
     if (!confirm(`Xóa TẤT CẢ ${history.length} mục lịch sử? Hành động này không thể hoàn tác.`)) return;
     history.length = 0;
     try { saveHistory(); } catch (e) { console.warn(e); }
+    // v1.6.1 — explicit cache invalidation (saveHistory also does this, belt-and-braces)
+    try { invalidateStatsCache(); } catch (_) {}
     renderStats();
     try { showToast('✅ Đã xóa toàn bộ lịch sử', 'success', 1800); } catch (_) {}
 }
@@ -1788,14 +1925,9 @@ function exportHistoryCSV() {
 }
 
 // Render per-quiz stats card (top 5 most attempted)
-function renderPerQuizStats() {
-    const el = document.getElementById('perQuizStats');
-    if (!el) return;
-    if (!history.length) {
-        el.innerHTML = `<div class="pq-empty">Chưa có dữ liệu — hãy làm vài đề trước nhé!</div>`;
-        return;
-    }
-    // Aggregate by quizId
+// v1.6.1 — Memoized per-quiz aggregation. Cache invalidated on history mutation.
+function computePerQuizStats() {
+    if (__statsCache.perQuiz) return __statsCache.perQuiz;
     const map = new Map();
     for (const h of history) {
         const key = h.quizId || 0;
@@ -1811,6 +1943,18 @@ function renderPerQuizStats() {
     const list = [...map.values()]
         .sort((a, b) => b.attempts - a.attempts || b.best - a.best)
         .slice(0, 6);
+    __statsCache.perQuiz = list;
+    return list;
+}
+
+function renderPerQuizStats() {
+    const el = document.getElementById('perQuizStats');
+    if (!el) return;
+    if (!history.length) {
+        el.innerHTML = `<div class="pq-empty">Chưa có dữ liệu — hãy làm vài đề trước nhé!</div>`;
+        return;
+    }
+    const list = computePerQuizStats();
     el.innerHTML = list.map(o => `
         <div class="pq-row">
             <div class="pq-title" title="${escapeHtml(o.title)}">${escapeHtml(o.title)}</div>
@@ -1845,14 +1989,43 @@ function renderTimeWindowStats() {
     }).join('');
 }
 
-function renderStats() {
+// v1.6.1 — Memoized overview computation. Cache is invalidated on every
+// saveHistory() / clearHistory() via invalidateStatsCache().
+function computeStatsOverview() {
+    if (__statsCache.overview) return __statsCache.overview;
     const total = history.length;
-    const avg = total ? (history.reduce((s, h) => s + h.score, 0) / total).toFixed(2) : '0.00';
-    const max = total ? Math.max(...history.map(h => h.score)).toFixed(2) : '0.00';
-    const uniqueQuizzes = new Set(history.map(h => h.quizId)).size;
-    const streak = computeStreak();
-    const totalTime = history.reduce((s, h) => s + (h.timeSpent || 0), 0);
-    const passRate = total ? Math.round((history.filter(h => h.score >= 5).length / total) * 100) : 0;
+    let sum = 0, max = 0, passCount = 0, totalTime = 0;
+    const quizIds = new Set();
+    for (let i = 0; i < total; i++) {
+        const h = history[i];
+        sum += h.score;
+        if (h.score > max) max = h.score;
+        if (h.score >= 5) passCount++;
+        totalTime += (h.timeSpent || 0);
+        quizIds.add(h.quizId);
+    }
+    const overview = {
+        total,
+        avg: total ? (sum / total).toFixed(2) : '0.00',
+        max: total ? max.toFixed(2) : '0.00',
+        uniqueQuizzes: quizIds.size,
+        streak: computeStreak(),
+        totalTime,
+        passRate: total ? Math.round((passCount / total) * 100) : 0
+    };
+    __statsCache.overview = overview;
+    return overview;
+}
+
+function renderStats() {
+    const ov = computeStatsOverview();
+    const total = ov.total;
+    const avg = ov.avg;
+    const max = ov.max;
+    const uniqueQuizzes = ov.uniqueQuizzes;
+    const streak = ov.streak;
+    const totalTime = ov.totalTime;
+    const passRate = ov.passRate;
 
     document.getElementById('statsOverview').innerHTML = `
         <div class="stat-card variant-1">
@@ -1958,13 +2131,19 @@ function renderStats() {
     renderHistoryList();
 
     // Wire filter event listeners (idempotent — bind only once)
+    // v1.6.1: use debounced handler for the search input (avoid heavy renders on every keystroke)
     if (!window.__historyFiltersBound) {
+        const debouncedRender = (typeof debounce === 'function') ? debounce(renderHistoryList, 300) : renderHistoryList;
+        window.renderHistoryListDebounced = debouncedRender;
         const ids = ['historySearch', 'historyScoreFilter', 'historyDateFilter'];
         ids.forEach(id => {
             const el = document.getElementById(id);
             if (el) {
-                const evt = el.tagName === 'INPUT' ? 'input' : 'change';
-                el.addEventListener(evt, renderHistoryList);
+                if (el.tagName === 'INPUT') {
+                    el.addEventListener('input', debouncedRender);
+                } else {
+                    el.addEventListener('change', renderHistoryList);
+                }
             }
         });
         window.__historyFiltersBound = true;
@@ -2038,6 +2217,16 @@ window.onload = () => {
     initKeyboardShortcuts();    // 👈 MỚI
     loadPreloadedQuizzes();     // 👈 MỚI: Nạp bộ đề ôn tập tổng hợp
     if (quizzes.length === 0) renderQuizList(); 
+
+    // v1.6.1: Wire up debounced search handlers (300ms) — avoid heavy renders on every keystroke
+    window.renderQuizListDebounced = debounce(renderQuizList, 300);
+    window.renderHistoryListDebounced = debounce(renderHistoryList, 300);
+    const sq = document.getElementById('searchQuiz');
+    if (sq && !sq.__debouncedBound) {
+        sq.removeAttribute('oninput');
+        sq.addEventListener('input', window.renderQuizListDebounced);
+        sq.__debouncedBound = true;
+    }
     
     // Đóng menu khi resize
     window.addEventListener('resize', () => {

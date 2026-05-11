@@ -605,6 +605,12 @@ function showSection(id, event) {
     // Ẩn panel trạng thái câu hỏi khi rời trang làm bài
     if (id !== 'doQuiz') hideQuestionStatusPanel();
     
+    // Đóng các modal đang mở (tùy chỉnh, hướng dẫn, phím tắt...) khi chuyển trang
+    const modal = document.getElementById('modal');
+    if (modal) modal.style.display = 'none';
+    const shortcutModal = document.getElementById('shortcutModal');
+    if (shortcutModal) shortcutModal.style.display = 'none';
+    
     // Tự đóng menu mobile sau khi chọn
     closeMobileMenu();
     

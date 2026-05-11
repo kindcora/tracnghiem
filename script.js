@@ -705,45 +705,129 @@ function editQuizTime(id) {
 }
 
 // ============= LÀM BÀI =============
+// Helper: render 1 câu hỏi thành HTML
+function renderQuestionHTML(q, i) {
+    const opts = q.options.map((opt, j) =>
+        `<label><input type="radio" name="q_${i}" value="${j}" onchange="userAnswers[${i}]=${j};updateProgress()">
+            ${String.fromCharCode(65+j)}. ${escapeHtml(opt)}</label>`
+    ).join('');
+    return `<div class="do-question">
+        <h4>Câu ${i+1}: ${escapeHtml(q.question)}</h4>
+        ${opts}
+    </div>`;
+}
+
+// Render câu hỏi theo từng batch để tránh crash trên mobile (Zalo WebView…)
+function renderQuestionsInChunks(container, questions, chunkSize = 30) {
+    let idx = 0;
+    const total = questions.length;
+    const schedule = window.requestIdleCallback
+        ? (cb) => window.requestIdleCallback(cb, { timeout: 200 })
+        : (cb) => setTimeout(cb, 16);
+
+    function renderNext() {
+        if (idx >= total) {
+            // Hoàn tất — bỏ hint loading nếu có
+            const hint = document.getElementById('quizLoadingHint');
+            if (hint) hint.remove();
+            return;
+        }
+        const end = Math.min(idx + chunkSize, total);
+        let html = '';
+        for (let i = idx; i < end; i++) {
+            html += renderQuestionHTML(questions[i], i);
+        }
+        // insertAdjacentHTML nhanh hơn & không xoá node hiện có
+        container.insertAdjacentHTML('beforeend', html);
+        idx = end;
+        // Cập nhật hint tiến độ
+        const hint = document.getElementById('quizLoadingHint');
+        if (hint) hint.textContent = `⏳ Đang tải đề... ${idx}/${total} câu`;
+        schedule(renderNext);
+    }
+    schedule(renderNext);
+}
+
 function startQuiz(id) {
     currentQuiz = quizzes.find(q => q.id === id);
     shuffledQuiz = prepareQuizForDoing(currentQuiz);
     userAnswers = {};
     document.getElementById('doQuizTitle').textContent = currentQuiz.title;
-    document.getElementById('doQuizContent').innerHTML = shuffledQuiz.questions.map((q, i) => `
-        <div class="do-question">
-            <h4>Câu ${i+1}: ${escapeHtml(q.question)}</h4>
-            ${q.options.map((opt, j) => `
-                <label><input type="radio" name="q_${i}" value="${j}" onchange="userAnswers[${i}]=${j};updateProgress()">
-                    ${String.fromCharCode(65+j)}. ${escapeHtml(opt)}</label>
-            `).join('')}
-        </div>
-    `).join('');
-    
+
+    const container = document.getElementById('doQuizContent');
+    // Xoá nội dung cũ
+    container.innerHTML = '';
+
+    const questions = shuffledQuiz.questions;
+    const total = questions.length;
+    // Batch đầu tiên render ngay (hiển thị nhanh cho user), phần còn lại render lazy
+    const FIRST_BATCH = Math.min(20, total);
+    let firstHTML = '';
+    for (let i = 0; i < FIRST_BATCH; i++) {
+        firstHTML += renderQuestionHTML(questions[i], i);
+    }
+    container.innerHTML = firstHTML;
+
+    // Nếu còn câu hỏi -> thêm hint + lazy render phần còn lại
+    if (total > FIRST_BATCH) {
+        const hint = document.createElement('div');
+        hint.id = 'quizLoadingHint';
+        hint.style.cssText = 'text-align:center;padding:12px;color:#888;font-style:italic;font-size:14px';
+        hint.textContent = `⏳ Đang tải đề... ${FIRST_BATCH}/${total} câu`;
+        container.appendChild(hint);
+        // Lazy render phần còn lại theo chunk
+        const remaining = questions.slice(FIRST_BATCH);
+        // Tạo wrapper tạm để render tiếp (chèn TRƯỚC hint)
+        // Dễ nhất: render vào container, sau đó đảm bảo hint luôn ở cuối
+        let idx = FIRST_BATCH;
+        const chunkSize = 25;
+        const schedule = window.requestIdleCallback
+            ? (cb) => window.requestIdleCallback(cb, { timeout: 300 })
+            : (cb) => setTimeout(cb, 16);
+        function renderNext() {
+            if (idx >= total) {
+                const h = document.getElementById('quizLoadingHint');
+                if (h) h.remove();
+                return;
+            }
+            const end = Math.min(idx + chunkSize, total);
+            let html = '';
+            for (let i = idx; i < end; i++) {
+                html += renderQuestionHTML(questions[i], i);
+            }
+            const h = document.getElementById('quizLoadingHint');
+            if (h) {
+                h.insertAdjacentHTML('beforebegin', html);
+                idx = end;
+                h.textContent = `⏳ Đang tải đề... ${idx}/${total} câu`;
+                if (idx >= total) h.remove();
+            } else {
+                container.insertAdjacentHTML('beforeend', html);
+                idx = end;
+            }
+            schedule(renderNext);
+        }
+        schedule(renderNext);
+    }
+
     timeLeft = shuffledQuiz.time * 60;
     updateTimer();
     timerInterval = setInterval(() => {
         timeLeft--; updateTimer();
         if (timeLeft <= 0) { clearInterval(timerInterval); submitQuiz(); }
     }, 1000);
-    
+
     document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
     document.getElementById('doQuiz').classList.add('active');
     // Đóng menu mobile nếu đang mở
     if (typeof closeMobileMenu === 'function') closeMobileMenu();
-    // Cuộn lên đầu trang NGAY LẬP TỨC (instant) để tránh hiển thị ở câu cuối
+    // Cuộn lên đầu trang NGAY LẬP TỨC
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
-    // Cuộn lại lần nữa sau khi DOM render xong (đảm bảo về đầu trang/câu 1)
     requestAnimationFrame(() => {
         window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
-        // Cuộn câu đầu tiên vào tầm nhìn
-        const firstQ = document.querySelector('#doQuizContent .do-question');
-        if (firstQ) {
-            // Dùng scrollIntoView với block 'start' để câu 1 ở đầu màn hình
-            setTimeout(() => {
-                window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
-            }, 50);
-        }
+        setTimeout(() => {
+            window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+        }, 50);
     });
     initQuestionStatusPanel();
     updateProgress();

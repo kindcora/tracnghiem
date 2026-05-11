@@ -17,21 +17,62 @@ function registerServiceWorker() {
             navigator.serviceWorker.register('sw.js')
                 .then(reg => {
                     console.log('✅ SW registered:', reg.scope);
-                    
+
+                    // Chủ động kiểm tra update mỗi khi load trang
+                    reg.update().catch(() => {});
+
                     // Kiểm tra cập nhật
                     reg.addEventListener('updatefound', () => {
                         const newSW = reg.installing;
+                        if (!newSW) return;
                         newSW.addEventListener('statechange', () => {
                             if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
-                                showToast('🔄 Có phiên bản mới! Tải lại để cập nhật', 'warning', 5000);
+                                // Có bản mới + đã có SW cũ kiểm soát → tự kích hoạt và reload
+                                console.log('🔄 SW mới đã sẵn sàng, đang kích hoạt...');
+                                try { newSW.postMessage('SKIP_WAITING'); } catch (e) {}
+                                showToast('🔄 Đang cập nhật phiên bản mới...', 'success', 2000);
                             }
                         });
                     });
                 })
                 .catch(err => console.log('❌ SW failed:', err));
+
+            // Khi SW mới chiếm quyền → tự reload (chỉ 1 lần) để tải code mới
+            let refreshing = false;
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                if (refreshing) return;
+                refreshing = true;
+                console.log('🔁 SW controller changed, reloading page...');
+                window.location.reload();
+            });
         });
     }
 }
+
+// ============= EMERGENCY: XÓA CACHE & RELOAD =============
+// Dùng khi user kẹt với phiên bản cũ (đặc biệt trên Firefox)
+function clearCacheAndReload() {
+    if (!confirm('Xóa toàn bộ cache và tải lại trang?\n(Dữ liệu đề thi của bạn vẫn được giữ nguyên)')) return;
+    const tasks = [];
+    // 1. Xóa Cache Storage
+    if ('caches' in window) {
+        tasks.push(
+            caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k))))
+        );
+    }
+    // 2. Gỡ Service Worker
+    if ('serviceWorker' in navigator) {
+        tasks.push(
+            navigator.serviceWorker.getRegistrations()
+                .then(regs => Promise.all(regs.map(r => r.unregister())))
+        );
+    }
+    Promise.allSettled(tasks).then(() => {
+        // Force reload, bỏ qua cache HTTP
+        window.location.reload(true);
+    });
+}
+window.clearCacheAndReload = clearCacheAndReload;
 
 // Theo dõi online/offline
 function initConnectionMonitor() {

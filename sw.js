@@ -1,5 +1,5 @@
 // Service Worker - QuizMaster Pro
-const CACHE_VERSION = 'quizmaster-v1.2.1-time1h';
+const CACHE_VERSION = 'quizmaster-v1.3.0-firefoxfix';
 const CACHE_NAME = CACHE_VERSION;
 
 // Files cần cache để chạy offline
@@ -19,16 +19,22 @@ const CDN_FILES = [
     'https://cdn.jsdelivr.net/npm/chart.js'
 ];
 
+// File type cần dùng NETWORK-FIRST (luôn lấy bản mới, fallback cache khi offline)
+// → Tránh được tình trạng Firefox stuck với phiên bản cũ
+function isAppShell(url) {
+    return /\.(html|js|css)(\?|$)/i.test(url) || url.endsWith('/') || url.endsWith('/index.html');
+}
+
 // === INSTALL: Cache files khi cài đặt ===
 self.addEventListener('install', event => {
-    console.log('[SW] Installing...');
+    console.log('[SW] Installing v' + CACHE_VERSION);
     event.waitUntil(
         caches.open(CACHE_NAME).then(cache => {
             console.log('[SW] Caching static files');
             return cache.addAll(STATIC_FILES).then(() => {
                 // Cache CDN (không block nếu lỗi)
                 return Promise.allSettled(
-                    CDN_FILES.map(url => 
+                    CDN_FILES.map(url =>
                         fetch(url, { mode: 'no-cors' })
                             .then(res => cache.put(url, res))
                             .catch(err => console.log('[SW] CDN cache failed:', url))
@@ -41,7 +47,7 @@ self.addEventListener('install', event => {
 
 // === ACTIVATE: Xóa cache cũ ===
 self.addEventListener('activate', event => {
-    console.log('[SW] Activating...');
+    console.log('[SW] Activating v' + CACHE_VERSION);
     event.waitUntil(
         caches.keys().then(keys => {
             return Promise.all(
@@ -54,13 +60,38 @@ self.addEventListener('activate', event => {
     );
 });
 
-// === FETCH: Phục vụ từ cache, fallback network ===
+// === FETCH: Network-first cho app shell, Cache-first cho asset khác ===
 self.addEventListener('fetch', event => {
     const { request } = event;
-    
+
     // Bỏ qua non-GET requests
     if (request.method !== 'GET') return;
-    
+
+    const url = request.url;
+
+    // 🔥 NETWORK-FIRST cho app shell (html/js/css) → Firefox sẽ luôn nhận bản mới
+    if (isAppShell(url)) {
+        event.respondWith(
+            fetch(request).then(response => {
+                if (response && response.status === 200) {
+                    const clone = response.clone();
+                    caches.open(CACHE_NAME).then(c => c.put(request, clone));
+                }
+                return response;
+            }).catch(() => {
+                // Offline fallback
+                return caches.match(request).then(cached => {
+                    if (cached) return cached;
+                    if (request.destination === 'document') {
+                        return caches.match('./index.html');
+                    }
+                });
+            })
+        );
+        return;
+    }
+
+    // CACHE-FIRST cho asset khác (images, fonts, CDN libraries, …)
     event.respondWith(
         caches.match(request).then(cached => {
             if (cached) {
@@ -72,7 +103,7 @@ self.addEventListener('fetch', event => {
                 }).catch(() => {});
                 return cached;
             }
-            
+
             // Network-first cho file mới
             return fetch(request).then(response => {
                 if (response && response.status === 200) {
@@ -81,7 +112,6 @@ self.addEventListener('fetch', event => {
                 }
                 return response;
             }).catch(() => {
-                // Offline fallback
                 if (request.destination === 'document') {
                     return caches.match('./index.html');
                 }

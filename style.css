@@ -1929,19 +1929,39 @@ body.light-mode .practice-feedback.wrong { color: #c62828; }
 }
 .flashcard-face {
     position: absolute;
+    top: 0;
+    left: 0;
     width: 100%;
+    height: 100%;
     min-height: 360px;
+    max-height: 70vh;
     backface-visibility: hidden;
     -webkit-backface-visibility: hidden;
     border-radius: 20px;
-    padding: 32px 28px;
+    padding: 28px 24px;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
     display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
+    align-items: stretch;
+    justify-content: flex-start;
     text-align: center;
     box-sizing: border-box;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.4) transparent;
+}
+.flashcard-face::-webkit-scrollbar {
+    width: 6px;
+}
+.flashcard-face::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.4);
+    border-radius: 4px;
+}
+.flashcard-face::-webkit-scrollbar-track {
+    background: transparent;
 }
 .flashcard-front {
     background: linear-gradient(135deg, #7c8cf8 0%, #5a6cf0 100%);
@@ -1965,23 +1985,29 @@ body.light-mode .flashcard-back {
     letter-spacing: 1px;
     opacity: 0.85;
     margin-bottom: 16px;
+    flex-shrink: 0;
 }
 .flashcard-question {
     font-size: 20px;
     font-weight: 600;
     line-height: 1.6;
-    flex: 1;
+    flex: 1 1 auto;
     display: flex;
     align-items: center;
     justify-content: center;
     width: 100%;
     word-break: break-word;
+    overflow-wrap: anywhere;
+    hyphens: auto;
+    padding: 8px 0;
+    min-height: 0;
 }
 .flashcard-hint {
     margin-top: 16px;
     font-size: 13px;
     opacity: 0.8;
     font-style: italic;
+    flex-shrink: 0;
 }
 .flashcard-options {
     width: 100%;
@@ -1989,6 +2015,7 @@ body.light-mode .flashcard-back {
     flex-direction: column;
     gap: 8px;
     margin-top: 8px;
+    flex-shrink: 0;
 }
 .fc-opt {
     background: rgba(255, 255, 255, 0.15);
@@ -1998,6 +2025,9 @@ body.light-mode .flashcard-back {
     font-size: 15px;
     line-height: 1.5;
     border: 1px solid rgba(255, 255, 255, 0.2);
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    hyphens: auto;
 }
 .fc-opt-correct {
     background: rgba(255, 255, 255, 0.3);
@@ -2051,7 +2081,7 @@ body, .container, .section, .quiz-item, .modal-content,
     .practice-q-text { font-size: 16px; }
     .practice-option { padding: 12px 14px; font-size: 14px; }
     .flashcard, .flashcard-inner, .flashcard-face { min-height: 320px; }
-    .flashcard-face { padding: 24px 18px; }
+    .flashcard-face { padding: 20px 16px; max-height: 75vh; }
     .flashcard-question { font-size: 17px; }
     .fc-opt { font-size: 13px; padding: 8px 12px; }
     .flashcard-actions button, .flashcard-controls button { font-size: 13px; padding: 8px 12px; }

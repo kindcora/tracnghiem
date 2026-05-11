@@ -715,6 +715,7 @@ function shuffleArray(arr) {
 
 function prepareQuizForDoing(quiz) {
     let qs = JSON.parse(JSON.stringify(quiz.questions));
+    // Trộn thứ tự đáp án trong mỗi câu
     if (quiz.shuffleO) {
         qs = qs.map(q => {
             const indices = q.options.map((_, i) => i);
@@ -724,7 +725,15 @@ function prepareQuizForDoing(quiz) {
             return { ...q, options: newOpts, correct: newCorrect };
         });
     }
+    // Trộn thứ tự câu hỏi
     if (quiz.shuffleQ) qs = shuffleArray(qs);
+    // Giới hạn số câu hỏi (chọn ngẫu nhiên N câu nếu đã trộn, hoặc N câu đầu nếu chưa)
+    const limit = parseInt(quiz.questionLimit, 10);
+    if (!isNaN(limit) && limit > 0 && limit < qs.length) {
+        // Nếu chưa trộn câu, vẫn nên lấy ngẫu nhiên để "chọn số câu hỏi ngẫu nhiên"
+        if (!quiz.shuffleQ) qs = shuffleArray(qs);
+        qs = qs.slice(0, limit);
+    }
     return { ...quiz, questions: qs };
 }
 
@@ -747,7 +756,7 @@ function renderQuizList() {
             </div>
             <div class="btn-group">
                 <button class="btn-primary" onclick="startQuiz(${q.id})">▶️ Làm bài</button>
-                <button class="btn-secondary" onclick="editQuizTime(${q.id})">⏱️ Sửa thời gian</button>
+                <button class="btn-secondary" onclick="customizeQuiz(${q.id})">⚙️ Tùy chỉnh</button>
                 <button class="btn-info" onclick="exportCSV(${q.id})">📄 CSV</button>
                 <button class="btn-info" onclick="exportWord(${q.id})">📝 Word</button>
                 <button class="btn-danger" onclick="deleteQuiz(${q.id})">🗑️</button>
@@ -763,25 +772,120 @@ function deleteQuiz(id) {
     renderQuizList();
 }
 
-// ============= SỬA THỜI GIAN LÀM ĐỀ =============
-function editQuizTime(id) {
+// ============= TÙY CHỈNH ĐỀ ÔN TẬP =============
+// Mở modal tùy chỉnh: thời gian, trộn câu, trộn đáp án, số câu hỏi ngẫu nhiên
+function customizeQuiz(id) {
     const quiz = quizzes.find(q => q.id === id);
     if (!quiz) return showToast('Không tìm thấy đề thi!', 'error');
-    const current = quiz.time || 15;
-    const input = prompt(`⏱️ Nhập thời gian làm đề mới (phút) cho "${quiz.title}":\n\nThời gian hiện tại: ${current} phút`, String(current));
-    if (input === null) return; // Hủy
-    const newTime = parseInt(input, 10);
-    if (isNaN(newTime) || newTime < 1) {
-        return showToast('Thời gian phải là số nguyên dương!', 'error');
+
+    const totalQuestions = quiz.questions.length;
+    const curTime = quiz.time || 15;
+    const curShuffleQ = !!quiz.shuffleQ;
+    const curShuffleO = !!quiz.shuffleO;
+    const curLimit = parseInt(quiz.questionLimit, 10);
+    const curLimitVal = (!isNaN(curLimit) && curLimit > 0) ? curLimit : totalQuestions;
+
+    const modal = document.getElementById('modal');
+    const modalContent = document.getElementById('modalContent');
+    if (!modal || !modalContent) return showToast('Không thể mở hộp tùy chỉnh!', 'error');
+
+    modalContent.innerHTML = `
+        <h2>⚙️ Tùy chỉnh đề ôn tập</h2>
+        <p style="color:#666;margin-bottom:16px"><b>${escapeHtml(quiz.title)}</b><br>
+        <small>Tổng số câu hỏi: <b>${totalQuestions}</b></small></p>
+
+        <div class="form-group">
+            <label>⏱️ Thời gian làm bài (phút):</label>
+            <input type="number" id="cqTime" min="1" max="600" value="${curTime}" style="padding:10px;border:2px solid #e0e0e0;border-radius:8px;width:100%">
+        </div>
+
+        <div class="form-group">
+            <label>🎯 Số câu hỏi (chọn ngẫu nhiên):</label>
+            <input type="number" id="cqLimit" min="1" max="${totalQuestions}" value="${curLimitVal}" style="padding:10px;border:2px solid #e0e0e0;border-radius:8px;width:100%">
+            <small style="color:#888">Để trống hoặc bằng ${totalQuestions} = dùng tất cả câu hỏi</small>
+            <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+                <button type="button" class="btn-info" style="width:auto;padding:6px 12px;font-size:13px" onclick="document.getElementById('cqLimit').value=10">10 câu</button>
+                <button type="button" class="btn-info" style="width:auto;padding:6px 12px;font-size:13px" onclick="document.getElementById('cqLimit').value=20">20 câu</button>
+                <button type="button" class="btn-info" style="width:auto;padding:6px 12px;font-size:13px" onclick="document.getElementById('cqLimit').value=50">50 câu</button>
+                <button type="button" class="btn-info" style="width:auto;padding:6px 12px;font-size:13px" onclick="document.getElementById('cqLimit').value=100">100 câu</button>
+                <button type="button" class="btn-info" style="width:auto;padding:6px 12px;font-size:13px" onclick="document.getElementById('cqLimit').value=${totalQuestions}">Tất cả</button>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+                <input type="checkbox" id="cqShuffleQ" ${curShuffleQ ? 'checked' : ''} style="width:20px;height:20px;cursor:pointer">
+                <span>🔀 Đảo thứ tự <b>câu hỏi</b></span>
+            </label>
+        </div>
+
+        <div class="form-group">
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+                <input type="checkbox" id="cqShuffleO" ${curShuffleO ? 'checked' : ''} style="width:20px;height:20px;cursor:pointer">
+                <span>🎲 Đảo thứ tự <b>đáp án</b> trong mỗi câu</span>
+            </label>
+        </div>
+
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:20px">
+            <button class="btn-primary" onclick="saveQuizCustomization(${id})">💾 Lưu cài đặt</button>
+            <button class="btn-secondary" onclick="saveAndStartQuiz(${id})">▶️ Lưu &amp; Làm bài ngay</button>
+            <button class="btn-danger" onclick="document.getElementById('modal').style.display='none'" style="width:auto">✕ Hủy</button>
+        </div>
+    `;
+    modal.style.display = 'block';
+}
+
+// Đọc dữ liệu từ modal & validate
+function readCustomizationForm() {
+    const time = parseInt(document.getElementById('cqTime')?.value, 10);
+    const limitRaw = document.getElementById('cqLimit')?.value;
+    const limit = limitRaw === '' ? NaN : parseInt(limitRaw, 10);
+    const shuffleQ = !!document.getElementById('cqShuffleQ')?.checked;
+    const shuffleO = !!document.getElementById('cqShuffleO')?.checked;
+    return { time, limit, shuffleQ, shuffleO };
+}
+
+function applyCustomizationToQuiz(id) {
+    const quiz = quizzes.find(q => q.id === id);
+    if (!quiz) { showToast('Không tìm thấy đề thi!', 'error'); return null; }
+    const { time, limit, shuffleQ, shuffleO } = readCustomizationForm();
+    if (isNaN(time) || time < 1) { showToast('Thời gian phải là số nguyên dương!', 'error'); return null; }
+    if (time > 600 && !confirm(`Thời gian ${time} phút khá lớn. Bạn có chắc chắn?`)) return null;
+
+    const total = quiz.questions.length;
+    let finalLimit;
+    if (isNaN(limit) || limit <= 0 || limit >= total) {
+        finalLimit = null; // dùng tất cả
+    } else {
+        finalLimit = limit;
     }
-    if (newTime > 600) {
-        if (!confirm(`Thời gian ${newTime} phút khá lớn. Bạn có chắc chắn?`)) return;
-    }
-    quiz.time = newTime;
+
+    quiz.time = time;
+    quiz.shuffleQ = shuffleQ;
+    quiz.shuffleO = shuffleO;
+    quiz.questionLimit = finalLimit;
     localStorage.setItem('quizzes', JSON.stringify(quizzes));
-    showToast(`✅ Đã cập nhật thời gian thành ${newTime} phút`, 'success');
+    return quiz;
+}
+
+function saveQuizCustomization(id) {
+    const quiz = applyCustomizationToQuiz(id);
+    if (!quiz) return;
+    document.getElementById('modal').style.display = 'none';
+    const limitMsg = quiz.questionLimit ? `${quiz.questionLimit} câu ngẫu nhiên` : `tất cả ${quiz.questions.length} câu`;
+    showToast(`✅ Đã lưu: ${quiz.time}p · ${limitMsg} · ${quiz.shuffleQ?'trộn câu':'giữ câu'} · ${quiz.shuffleO?'trộn đáp án':'giữ đáp án'}`, 'success', 4000);
     renderQuizList();
 }
+
+function saveAndStartQuiz(id) {
+    const quiz = applyCustomizationToQuiz(id);
+    if (!quiz) return;
+    document.getElementById('modal').style.display = 'none';
+    startQuiz(id);
+}
+
+// Tương thích ngược: editQuizTime giờ mở modal tùy chỉnh đầy đủ
+function editQuizTime(id) { customizeQuiz(id); }
 
 // ============= LÀM BÀI =============
 // Helper: render 1 câu hỏi thành HTML
@@ -1266,24 +1370,26 @@ pieChartObj = new Chart(document.getElementById('pieChart'), {
 function loadPreloadedQuizzes() {
     if (!window.PRELOADED_QUIZZES || !Array.isArray(window.PRELOADED_QUIZZES)) return;
     let added = 0;
-    let updated = 0;
+    let syncedQuestions = 0;
     for (const pq of window.PRELOADED_QUIZZES) {
         const existing = quizzes.find(q => q.id === pq.id);
         if (existing) {
-            // Sync time from preloaded source (so updates to time take effect)
-            if (existing.time !== pq.time) {
-                existing.time = pq.time;
-                updated++;
+            // Đồng bộ NỘI DUNG câu hỏi từ nguồn (khi bộ đề có cập nhật)
+            // KHÔNG ghi đè các cài đặt người dùng đã tùy chỉnh:
+            // time, shuffleQ, shuffleO, questionLimit
+            if (Array.isArray(pq.questions) && pq.questions.length !== existing.questions.length) {
+                existing.questions = pq.questions;
+                syncedQuestions++;
             }
             continue;
         }
         quizzes.push(pq);
         added++;
     }
-    if (added > 0 || updated > 0) {
+    if (added > 0 || syncedQuestions > 0) {
         localStorage.setItem('quizzes', JSON.stringify(quizzes));
         if (added > 0) console.log(`✅ Đã nạp ${added} bộ đề ôn tập có sẵn`);
-        if (updated > 0) console.log(`🔄 Đã cập nhật thời gian cho ${updated} bộ đề`);
+        if (syncedQuestions > 0) console.log(`🔄 Đã đồng bộ câu hỏi cho ${syncedQuestions} bộ đề`);
     }
 }
 
@@ -1297,7 +1403,8 @@ function startPreloadedQuiz() {
         quizzes.push(pq);
         localStorage.setItem('quizzes', JSON.stringify(quizzes));
     }
-    startQuiz(pq.id);
+    // Mở modal tùy chỉnh trước khi làm bài (cho phép chỉnh thời gian, số câu, đảo thứ tự)
+    customizeQuiz(pq.id);
 }
 
 window.onload = () => { 

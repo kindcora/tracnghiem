@@ -227,6 +227,336 @@ function startBookmarkedReview(quizId) {
 }
 window.startBookmarkedReview = startBookmarkedReview;
 
+// ============================================
+// 🔁 WRONG QUESTIONS SET (v1.9.0 — Feature 3)
+// Lưu set chỉ số câu SAI (theo origIndex) cho từng quizId.
+// Mỗi lần submit: thêm câu sai, xóa câu đúng → set chỉ chứa câu CÒN sai.
+// Mục tiêu: cho phép "Ôn lại các câu mình còn sai" cho tới khi sạch sẽ.
+// Key: 'wrongQuestions_<quizId>' → Array<number>
+// ============================================
+function _wrongKey(quizId) { return 'wrongQuestions_' + quizId; }
+function getWrongSet(quizId) {
+    if (quizId == null) return [];
+    const arr = safeGetItem(_wrongKey(quizId), []);
+    return Array.isArray(arr) ? arr : [];
+}
+function setWrongSet(quizId, arr) {
+    if (quizId == null) return false;
+    return safeSetItem(_wrongKey(quizId), Array.isArray(arr) ? arr : []);
+}
+function countWrong(quizId) { return getWrongSet(quizId).length; }
+
+/**
+ * Cập nhật wrong-set sau khi submit 1 bài.
+ * - Câu mà user trả lời SAI → add vào set (dedupe)
+ * - Câu mà user trả lời ĐÚNG → remove khỏi set (đã khắc phục)
+ * - Câu bỏ trống → không đụng (giữ trạng thái cũ)
+ * @param {number} quizId - id của quiz GỐC (không dùng quiz tạm)
+ * @param {Array} questions - shuffledQuiz.questions của lần làm vừa rồi
+ * @param {Object} answers - userAnswers map
+ */
+function updateWrongSet(quizId, questions, answers) {
+    if (quizId == null || !Array.isArray(questions)) return;
+    const set = new Set(getWrongSet(quizId));
+    for (let i = 0; i < questions.length; i++) {
+        const q = questions[i];
+        const orig = (q && q.__origIndex !== undefined) ? q.__origIndex : null;
+        if (orig == null) continue;
+        const ans = answers[i];
+        if (ans === undefined) continue; // bỏ trống → không đụng
+        if (ans === q.correct) {
+            set.delete(orig); // đã đúng → gỡ khỏi danh sách câu sai
+        } else {
+            set.add(orig);
+        }
+    }
+    setWrongSet(quizId, Array.from(set).sort((a,b)=>a-b));
+}
+
+/**
+ * Bắt đầu ôn lại CHỈ những câu còn sai của 1 quiz.
+ * Tương tự startBookmarkedReview, dùng quiz tạm id âm + flag __wrongReviewOf.
+ */
+function startWrongReview(quizId) {
+    try {
+        const baseQuiz = quizzes.find(q => q.id === quizId);
+        if (!baseQuiz) return showToast('Không tìm thấy đề gốc!', 'error');
+        const wrongs = getWrongSet(quizId);
+        if (!wrongs.length) return showToast('🎉 Bạn không còn câu nào sai cho đề này!', 'success', 2500);
+        const subQs = wrongs.slice().sort((a,b)=>a-b)
+            .map(oi => baseQuiz.questions[oi])
+            .filter(Boolean);
+        if (!subQs.length) return showToast('Set câu sai không còn hợp lệ', 'error');
+        const tempId = -Math.abs(quizId) * 1000 - 7;
+        const existIdx = quizzes.findIndex(q => q.id === tempId);
+        if (existIdx !== -1) quizzes.splice(existIdx, 1);
+        const tempQuiz = {
+            id: tempId,
+            title: '🔁 Câu sai — ' + baseQuiz.title,
+            desc: 'Ôn lại ' + subQs.length + ' câu còn sai',
+            time: Math.max(5, Math.ceil(subQs.length * 0.5)),
+            shuffleQ: false, shuffleO: !!baseQuiz.shuffleO,
+            showReviewDetail: true,
+            questions: subQs,
+            __preloaded: true,
+            __wrongReviewOf: quizId  // tham chiếu về quiz gốc — submit sẽ cập nhật set GỐC
+        };
+        quizzes.push(tempQuiz);
+        startQuiz(tempId);
+    } catch (e) {
+        console.error('[startWrongReview]', e);
+        try { showToast('Lỗi: ' + (e.message || e), 'error', 3000); } catch (_) {}
+    }
+}
+window.startWrongReview = startWrongReview;
+
+// ============================================
+// 💾 RESUME UNFINISHED QUIZ (v1.9.0 — Feature 4)
+// Auto-save mỗi 5s state làm bài (userAnswers, timeLeft, thứ tự câu/đáp án).
+// Cho phép "Tiếp tục bài đang dở" khi app bị kill / đóng tab giữa chừng.
+// Key: 'resume_<quizId>' → {answers, timeLeft, startedAt, savedAt, qOrder, oOrders, title}
+// Hạn fresh: 24h. Quiz tạm (id < 0) không lưu.
+// ============================================
+const RESUME_TTL_MS = 24 * 60 * 60 * 1000;  // 24h
+const RESUME_PREFIX = 'resume_';
+let __resumeTimer = null;
+
+function _resumeKey(quizId) { return RESUME_PREFIX + quizId; }
+
+function snapshotResume() {
+    try {
+        if (!currentQuiz || currentQuiz.id == null) return false;
+        if (currentQuiz.id < 0) return false; // quiz tạm — không lưu
+        if (!shuffledQuiz || !Array.isArray(shuffledQuiz.questions)) return false;
+        const qs = shuffledQuiz.questions;
+        const qOrder = new Array(qs.length);
+        const oOrders = shuffledQuiz.shuffleO ? new Array(qs.length) : null;
+        // qOrder[i] = origIndex của câu thứ i trong shuffled
+        // oOrders[i] = mảng index (trong options của câu gốc) đã được dùng làm options[0..n-1]
+        const baseQuiz = quizzes.find(q => q.id === currentQuiz.id);
+        if (!baseQuiz) return false;
+        for (let i = 0; i < qs.length; i++) {
+            const q = qs[i];
+            const orig = (q.__origIndex !== undefined) ? q.__origIndex : i;
+            qOrder[i] = orig;
+            if (oOrders) {
+                const origQ = baseQuiz.questions[orig];
+                if (origQ && Array.isArray(origQ.options)) {
+                    // Tìm mapping options[j] (trong shuffled) → index trong origQ.options
+                    const mp = new Array(q.options.length);
+                    for (let j = 0; j < q.options.length; j++) {
+                        mp[j] = origQ.options.indexOf(q.options[j]);
+                    }
+                    oOrders[i] = mp;
+                } else {
+                    oOrders[i] = null;
+                }
+            }
+        }
+        const data = {
+            quizId: currentQuiz.id,
+            title: currentQuiz.title,
+            answers: userAnswers,
+            timeLeft: timeLeft,
+            startedAt: window.__quizStartedAt || Date.now(),
+            savedAt: Date.now(),
+            qOrder: qOrder,
+            oOrders: oOrders,
+            shuffleO: !!shuffledQuiz.shuffleO,
+            time: shuffledQuiz.time,
+            showReviewDetail: !!shuffledQuiz.showReviewDetail
+        };
+        return safeSetItem(_resumeKey(currentQuiz.id), data);
+    } catch (e) { console.warn('[snapshotResume]', e); return false; }
+}
+
+function startResumeAutoSave() {
+    stopResumeAutoSave();
+    __resumeTimer = setInterval(snapshotResume, 5000);
+    // Save trên visibility change (Zalo/iOS Safari kill background)
+    document.addEventListener('visibilitychange', snapshotResume);
+    window.addEventListener('pagehide', snapshotResume);
+    window.addEventListener('beforeunload', snapshotResume);
+}
+function stopResumeAutoSave() {
+    if (__resumeTimer) { clearInterval(__resumeTimer); __resumeTimer = null; }
+    document.removeEventListener('visibilitychange', snapshotResume);
+    window.removeEventListener('pagehide', snapshotResume);
+    window.removeEventListener('beforeunload', snapshotResume);
+}
+function clearResume(quizId) {
+    try {
+        if (quizId != null) localStorage.removeItem(_resumeKey(quizId));
+    } catch (e) {}
+}
+
+function findResumes() {
+    const out = [];
+    try {
+        const now = Date.now();
+        for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (!k || k.indexOf(RESUME_PREFIX) !== 0) continue;
+            const data = safeGetItem(k, null);
+            if (!data || typeof data !== 'object') continue;
+            if (!data.savedAt || (now - data.savedAt) > RESUME_TTL_MS) {
+                try { localStorage.removeItem(k); } catch (_) {}
+                continue;
+            }
+            // Phải còn tồn tại quiz gốc trong danh sách
+            if (!quizzes.some(q => q.id === data.quizId)) continue;
+            // Phải có ít nhất 1 câu đã trả lời (đáng resume)
+            const answered = data.answers ? Object.keys(data.answers).length : 0;
+            if (answered === 0) continue;
+            out.push(data);
+        }
+        out.sort((a, b) => b.savedAt - a.savedAt);
+    } catch (e) { console.warn('[findResumes]', e); }
+    return out;
+}
+
+/** Khôi phục state từ resume snapshot và bật làm bài tiếp. */
+function resumeQuiz(quizId) {
+    try {
+        const data = safeGetItem(_resumeKey(quizId), null);
+        if (!data) return showToast('Không tìm thấy phiên đang dở', 'error');
+        const base = quizzes.find(q => q.id === data.quizId);
+        if (!base) return showToast('Đề gốc đã bị xóa', 'error');
+        // Tag origIndex (idempotent)
+        for (let i = 0; i < base.questions.length; i++) {
+            const _q = base.questions[i];
+            if (_q && _q.__origIndex === undefined) _q.__origIndex = i;
+        }
+        // Build lại shuffledQuiz theo snapshot
+        const newQs = data.qOrder.map((origIdx, i) => {
+            const orig = base.questions[origIdx];
+            if (!orig) return null;
+            if (data.shuffleO && data.oOrders && Array.isArray(data.oOrders[i])) {
+                const mp = data.oOrders[i];
+                const newOpts = mp.map(idx => orig.options[idx]);
+                const newCorrect = mp.indexOf(orig.correct);
+                return { question: orig.question, options: newOpts, correct: newCorrect, __origIndex: origIdx };
+            }
+            return { question: orig.question, options: orig.options.slice(), correct: orig.correct, __origIndex: origIdx };
+        }).filter(Boolean);
+
+        currentQuiz = base;
+        shuffledQuiz = {
+            id: base.id, title: base.title, desc: base.desc,
+            time: data.time || base.time,
+            shuffleQ: false, shuffleO: !!data.shuffleO,
+            showReviewDetail: data.showReviewDetail !== undefined ? data.showReviewDetail : (base.showReviewDetail !== false),
+            questionLimit: null,
+            questions: newQs
+        };
+        userAnswers = data.answers || {};
+        window.__quizStartedAt = data.startedAt || Date.now();
+
+        // Render UI (giống đoạn cuối startQuiz)
+        document.getElementById('doQuizTitle').textContent = shuffledQuiz.title + ' — (tiếp tục)';
+        const container = document.getElementById('doQuizContent');
+        container.innerHTML = '';
+        const questions = shuffledQuiz.questions;
+        const total = questions.length;
+        const FIRST_BATCH = total > 150 ? Math.min(5, total) : Math.min(10, total);
+        let firstHTML = '';
+        for (let i = 0; i < FIRST_BATCH; i++) firstHTML += renderQuestionHTML(questions[i], i);
+        container.innerHTML = firstHTML;
+
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+        document.getElementById('doQuiz').classList.add('active');
+        if (typeof closeMobileMenu === 'function') closeMobileMenu();
+        window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+
+        if (total > FIRST_BATCH) {
+            const hint = document.createElement('div');
+            hint.id = 'quizLoadingHint';
+            hint.style.cssText = 'text-align:center;padding:12px;color:#888;font-style:italic;font-size:14px';
+            hint.textContent = `⏳ Đang tải đề... ${FIRST_BATCH}/${total} câu`;
+            container.appendChild(hint);
+            let idx = FIRST_BATCH;
+            const chunkSize = total > 150 ? 8 : 15;
+            const schedule = window.requestIdleCallback
+                ? (cb) => window.requestIdleCallback(cb, { timeout: 300 })
+                : (window.requestAnimationFrame ? (cb) => window.requestAnimationFrame(() => setTimeout(cb, 0)) : (cb) => setTimeout(cb, 16));
+            function renderNext() {
+                try {
+                    if (idx >= total) { const h = document.getElementById('quizLoadingHint'); if (h) h.remove(); return; }
+                    const end = Math.min(idx + chunkSize, total);
+                    let html = '';
+                    for (let i = idx; i < end; i++) html += renderQuestionHTML(questions[i], i);
+                    const h = document.getElementById('quizLoadingHint');
+                    if (h) { h.insertAdjacentHTML('beforebegin', html); idx = end; h.textContent = `⏳ Đang tải đề... ${idx}/${total} câu`; if (idx >= total) h.remove(); }
+                    else { container.insertAdjacentHTML('beforeend', html); idx = end; }
+                    schedule(renderNext);
+                } catch (e) { console.error('[resume renderNext]', e); }
+            }
+            schedule(renderNext);
+        }
+
+        timeLeft = Math.max(10, data.timeLeft || (shuffledQuiz.time * 60));
+        updateTimer();
+        if (timerInterval) { try { clearInterval(timerInterval); } catch(_){} }
+        timerInterval = setInterval(() => {
+            timeLeft--; updateTimer();
+            if (timeLeft <= 0) { clearInterval(timerInterval); submitQuiz(); }
+        }, 1000);
+
+        // Tick các radio đã chọn (sau khi DOM render xong)
+        requestAnimationFrame(() => {
+            try {
+                Object.keys(userAnswers).forEach(qIdx => {
+                    const ans = userAnswers[qIdx];
+                    const radio = document.querySelector(`input[type="radio"][name="q_${qIdx}"][value="${ans}"]`);
+                    if (radio) radio.checked = true;
+                });
+            } catch (e) {}
+        });
+
+        initQuestionStatusPanel();
+        updateProgress();
+        if (typeof resetCurrentQuestion === 'function') resetCurrentQuestion();
+        startResumeAutoSave();
+        const ansCount = Object.keys(userAnswers).length;
+        showToast(`💾 Đã khôi phục: ${ansCount}/${total} câu • còn ${Math.floor(timeLeft/60)}:${String(timeLeft%60).padStart(2,'0')}`, 'success', 3500);
+    } catch (e) {
+        console.error('[resumeQuiz]', e);
+        showToast('Lỗi khôi phục bài: ' + (e.message || e), 'error', 4000);
+    }
+}
+window.resumeQuiz = resumeQuiz;
+
+/** Render banner trên trang chủ nếu có bài đang dở */
+function renderResumeBanner() {
+    try {
+        const host = document.getElementById('resumeBannerHost');
+        if (!host) return;
+        const resumes = findResumes();
+        if (!resumes.length) { host.innerHTML = ''; host.style.display = 'none'; return; }
+        host.style.display = '';
+        host.innerHTML = resumes.map(r => {
+            const ago = Math.max(1, Math.round((Date.now() - r.savedAt) / 60000));
+            const agoTxt = ago < 60 ? (ago + ' phút trước') : (Math.round(ago/60) + ' giờ trước');
+            const answered = r.answers ? Object.keys(r.answers).length : 0;
+            const total = r.qOrder ? r.qOrder.length : '?';
+            const mins = r.timeLeft ? Math.floor(r.timeLeft / 60) : 0;
+            const secs = r.timeLeft ? (r.timeLeft % 60) : 0;
+            return `<div class="resume-banner">
+                <div class="resume-banner-info">
+                    <div class="resume-banner-title">💾 Bài đang dở: <b>${escapeHtml(r.title || 'Đề thi')}</b></div>
+                    <div class="resume-banner-meta">${answered}/${total} câu • còn ${mins}:${String(secs).padStart(2,'0')} • lưu ${agoTxt}</div>
+                </div>
+                <div class="resume-banner-actions">
+                    <button class="btn-primary" onclick="resumeQuiz(${r.quizId})" style="width:auto;padding:8px 16px">▶️ Tiếp tục</button>
+                    <button class="btn-danger" onclick="if(confirm('Bỏ bài đang dở này?')){clearResume(${r.quizId});renderResumeBanner();}" style="width:auto;padding:8px 12px">✕</button>
+                </div>
+            </div>`;
+        }).join('');
+    } catch (e) { console.warn('[renderResumeBanner]', e); }
+}
+window.renderResumeBanner = renderResumeBanner;
+window.clearResume = clearResume;
+
 let questions = [];
 let quizzes = safeGetItem('quizzes', []);
 let history = safeGetItem('history', []);
@@ -1228,24 +1558,38 @@ function renderQuizList() {
     }
     // v1.6.1 — Event delegation: replace 7 inline onclicks per card with
     // data-action attributes + 1 delegated container listener (see below).
-    list.innerHTML = filtered.map(q => `
+    list.innerHTML = filtered.map(q => {
+        // v1.9.0 — Hiện nút Ôn câu sai / Ôn câu đánh dấu nếu có dữ liệu
+        const __nWrong = countWrong(q.id);
+        const __nBM = (q.id != null) ? getBookmarks(q.id).length : 0;
+        const wrongBtn = __nWrong > 0
+            ? `<button class="btn-danger" data-action="wrong" title="Ôn lại ${__nWrong} câu bạn còn sai">🔁 Ôn câu sai (${__nWrong})</button>`
+            : '';
+        const bmBtn = __nBM > 0
+            ? `<button class="btn-warning" data-action="bookmarks" title="Ôn lại ${__nBM} câu bạn đã đánh dấu">🚩 Câu đánh dấu (${__nBM})</button>`
+            : '';
+        return `
         <div class="quiz-item" data-quiz-id="${q.id}">
             <h3>${escapeHtml(q.title)}</h3>
             <p>${escapeHtml(q.desc || 'Không có mô tả')}</p>
             <div class="meta">
                 <span>📝 ${q.questions.length} câu</span>
                 <span>⏱️ ${q.time} phút</span>
+                ${__nWrong > 0 ? `<span class="meta-warn">🔁 ${__nWrong} sai</span>` : ''}
+                ${__nBM > 0 ? `<span class="meta-bm">🚩 ${__nBM} đánh dấu</span>` : ''}
             </div>
             <div class="btn-group">
                 <button class="btn-primary" data-action="start">▶️ Làm bài</button>
+                ${wrongBtn}
+                ${bmBtn}
                 <button class="btn-success" data-action="practice" title="Luyện tập với phản hồi tức thì">📖 Luyện tập</button>
                 <button class="btn-warning" data-action="flashcard" title="Học bằng flashcard">🃏 Flashcard</button>
                 <button class="btn-secondary" data-action="customize">⚙️ Tùy chỉnh</button>
                 <button class="btn-info" data-action="csv">📄 CSV</button>
                 <button class="btn-info" data-action="word">📝 Word</button>
             </div>
-        </div>
-    `).join('');
+        </div>`;
+    }).join('');
 
     // Bind delegated handler ONCE per #quizList lifetime (idempotent).
     if (!list.__delegatedBound) {
@@ -1259,6 +1603,8 @@ function renderQuizList() {
             const action = btn.getAttribute('data-action');
             switch (action) {
                 case 'start':     return startQuiz(id);
+                case 'wrong':     return startWrongReview(id);
+                case 'bookmarks': return startBookmarkedReview(id);
                 case 'practice':  return startPractice(id);
                 case 'flashcard': return startFlashcard(id);
                 case 'customize': return customizeQuiz(id);
@@ -1562,6 +1908,14 @@ function startQuiz(id) {
         initQuestionStatusPanel();
         updateProgress();
         resetCurrentQuestion();
+        // v1.9.0 — Bật auto-save resume (chỉ cho quiz GỐC, id >= 0)
+        try {
+            if (currentQuiz && currentQuiz.id >= 0) {
+                // Xóa resume cũ của quiz này (đã làm lại)
+                clearResume(currentQuiz.id);
+                startResumeAutoSave();
+            }
+        } catch (_) {}
     } catch (e) {
         console.error('[startQuiz] fatal error:', e);
         try { clearInterval(timerInterval); } catch (_) {}
@@ -1685,6 +2039,12 @@ function _buildResultHtml(scoreInfo, correct, total, timeStr, reviewVisible) {
     const __bmBanner = __bmCount > 0
         ? `<div class="result-bookmark-row"><span>🚩 Bạn đã đánh dấu <b>${__bmCount}</b> câu xem lại</span><button class="btn-info" style="padding:6px 14px;font-size:13px;width:auto;margin-left:auto" onclick="startBookmarkedReview(${__bmQuizId})">🔁 Làm lại các câu đánh dấu</button></div>`
         : '';
+    // v1.9.0 — Banner câu sai (Feature 3)
+    const __wrongQuizId = (currentQuiz && currentQuiz.__wrongReviewOf != null) ? currentQuiz.__wrongReviewOf : (currentQuiz && currentQuiz.__bookmarkReviewOf != null) ? currentQuiz.__bookmarkReviewOf : __bmQuizId;
+    const __wrongCount = __wrongQuizId != null ? countWrong(__wrongQuizId) : 0;
+    const __wrongBanner = __wrongCount > 0
+        ? `<div class="result-wrong-row"><span>🔁 Còn <b>${__wrongCount}</b> câu bạn chưa làm đúng — luyện đến khi sạch sẽ!</span><button class="btn-danger" style="padding:6px 14px;font-size:13px;width:auto;margin-left:auto" onclick="startWrongReview(${__wrongQuizId})">🔁 Ôn câu sai ngay</button></div>`
+        : (__wrongQuizId != null && getWrongSet(__wrongQuizId).length === 0 && Object.keys(getNotes(__wrongQuizId)).length === 0 ? '' : (__wrongQuizId != null && getWrongSet(__wrongQuizId).length === 0 ? `<div class="result-wrong-row good"><span>🎉 Tuyệt! Bạn không còn câu nào sai cho đề này</span></div>` : ''));
     return `
         <div class="result-box ${scoreClass}">
             <div class="result-emoji-big">${emoji}</div>
@@ -1698,6 +2058,7 @@ function _buildResultHtml(scoreInfo, correct, total, timeStr, reviewVisible) {
             <div class="result-progress-ring">
                 <div class="result-progress-bar"><div class="result-progress-fill" style="width:${percent}%"></div></div>
             </div>
+            ${__wrongBanner}
             ${__bmBanner}
         </div>
         <div class="result-actions">
@@ -1750,6 +2111,11 @@ function submitQuiz() {
         timerInterval = null;
     } catch (e) {}
     try { hideQuestionStatusPanel(); } catch (e) {}
+    // v1.9.0 — Tắt auto-save & xóa snapshot resume
+    try {
+        if (typeof stopResumeAutoSave === 'function') stopResumeAutoSave();
+        if (currentQuiz && currentQuiz.id != null && currentQuiz.id >= 0) clearResume(currentQuiz.id);
+    } catch (_) {}
 
     if (!shuffledQuiz || !shuffledQuiz.questions || shuffledQuiz.questions.length === 0) {
         showToast && showToast('Không có dữ liệu bài làm!', 'error');
@@ -1760,6 +2126,15 @@ function submitQuiz() {
 
     // 1) Collect answers + count correct (fast — no HTML to avoid Zalo WebView OOM)
     const { total, correct } = _collectQuizAnswers(questions, userAnswers);
+    // v1.9.0 — Cập nhật set câu SAI cho quiz gốc (cả khi đang làm quiz tạm 'ôn câu sai/đánh dấu')
+    try {
+        const __wQuizId = (currentQuiz && currentQuiz.__wrongReviewOf != null)
+            ? currentQuiz.__wrongReviewOf
+            : (currentQuiz && currentQuiz.__bookmarkReviewOf != null)
+                ? currentQuiz.__bookmarkReviewOf
+                : (currentQuiz && currentQuiz.id);
+        if (__wQuizId != null && __wQuizId >= 0) updateWrongSet(__wQuizId, questions, userAnswers);
+    } catch (e) { console.warn('[updateWrongSet]', e); }
 
     // 2) Calculate score + grade meta
     const scoreInfo = _calculateQuizScore(correct, total);
@@ -2683,6 +3058,7 @@ window.onload = () => {
     initInstallPrompt();        // 👈 MỚI
     initKeyboardShortcuts();    // 👈 MỚI
     loadPreloadedQuizzes();     // 👈 MỚI: Nạp bộ đề ôn tập tổng hợp
+    try { renderResumeBanner(); } catch (_) {}
     if (quizzes.length === 0) renderQuizList(); 
 
     // v1.6.1: Wire up debounced search handlers (300ms) — avoid heavy renders on every keystroke

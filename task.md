@@ -63,3 +63,47 @@
 - [x] Task 12: `node --check script.js` PASS
 - [x] Task 13: `node --check sw.js` PASS
 - [ ] Task 14: Manual test desktop + mobile (user action)
+
+---
+
+# Task Checklist — v1.9.0
+
+## 🚩 Feature 1: Bookmark
+- [x] Helper block `getBookmarks/setBookmarks/toggleBookmark` (origIndex-based, idempotent)
+- [x] `__origIndex` tagging trong `prepareQuizForDoing`
+- [x] Nút bookmark trong `renderQuestionHTML`
+- [x] Sync class `.bookmarked` cho qsp-cell trong init + update
+- [x] Banner kết quả + nút "Làm lại các câu đánh dấu"
+- [x] `startBookmarkedReview` (quiz tạm id âm, `__bookmarkReviewOf`)
+- [x] CSS .bookmark-btn + .qsp-cell.bookmarked + .result-bookmark-row
+
+## 📝 Feature 2: Notes
+- [x] Helper block `getNote/setNote` + debounce save
+- [x] Textarea trong .review-detail câu SAI
+- [x] Banner accordion trên .do-question khi câu có note
+- [x] Tương thích với quiz tạm — đọc note quiz gốc qua __bookmarkReviewOf
+- [x] CSS .do-question-note + .review-note + .note-save-status
+
+## 🔁 Feature 3: Wrong-set review
+- [x] Helper `getWrongSet/updateWrongSet/startWrongReview`
+- [x] Hook trong submitQuiz cập nhật set sau khi tính điểm
+- [x] Badge `meta-warn` trên quiz card + nút "Ôn câu sai"
+- [x] Case 'wrong' trong delegated switch
+- [x] Banner kết quả `result-wrong-row` (đỏ nếu còn / xanh "🎉 Tuyệt!" nếu hết)
+- [x] CSS .meta-warn + .meta-bm + .result-wrong-row
+
+## 💾 Feature 4: Resume
+- [x] Helper block `snapshotResume/startResumeAutoSave/findResumes/resumeQuiz/clearResume/renderResumeBanner`
+- [x] Hook trong startQuiz: clear + start autosave (chỉ id ≥ 0)
+- [x] Hook trong submitQuiz: stop autosave + clear resume
+- [x] `<div id="resumeBannerHost">` trong index.html
+- [x] Gọi `renderResumeBanner()` trong window.onload
+- [x] CSS .resume-banner + animation
+
+## Release
+- [x] Bump sw.js CACHE_VERSION → quizmaster-v1.9.0-learnsmart
+- [x] Bump index.html ?v=1.9.0
+- [x] `node --check script.js` PASS
+- [x] `node --check sw.js` PASS
+- [ ] Manual test 4 features trên desktop + mobile (user action)
+

@@ -2495,3 +2495,111 @@ body, .container, .section, .quiz-item, .modal-content,
     .review-note textarea { font-size: 13px; min-height: 60px; }
 }
 
+/* ============================================ */
+/* 🔁 WRONG-SET & 🚩 BOOKMARK BADGES — Quiz card meta (v1.9.0) */
+/* ============================================ */
+.quiz-item .meta .meta-warn {
+    background: linear-gradient(135deg, rgba(238,82,83,0.15), rgba(238,82,83,0.05));
+    color: #ee5253;
+    border: 1px solid rgba(238,82,83,0.35);
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+}
+.quiz-item .meta .meta-bm {
+    background: linear-gradient(135deg, rgba(245,179,1,0.18), rgba(245,179,1,0.06));
+    color: #d18900;
+    border: 1px solid rgba(245,179,1,0.45);
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+/* ============================================ */
+/* 🔁 RESULT WRONG-SET BANNER (v1.9.0) */
+/* ============================================ */
+.result-wrong-row {
+    margin-top: 12px;
+    padding: 10px 14px;
+    background: linear-gradient(135deg, rgba(238,82,83,0.15), rgba(238,82,83,0.08));
+    border: 1px dashed rgba(238,82,83,0.5);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    font-size: 14px;
+    color: var(--text-main, #333);
+}
+.result-wrong-row b { color: #ee5253; }
+.result-wrong-row.good {
+    background: linear-gradient(135deg, rgba(46,204,113,0.15), rgba(46,204,113,0.06));
+    border-color: rgba(46,204,113,0.5);
+    justify-content: center;
+    font-weight: 600;
+    color: #27ae60;
+}
+
+/* ============================================ */
+/* 💾 RESUME BANNER (v1.9.0 — Feature 4) */
+/* ============================================ */
+.resume-banner-host {
+    max-width: 800px;
+    margin: 20px auto 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 0 16px;
+}
+.resume-banner {
+    background: linear-gradient(135deg, #2ecc71, #27ae60);
+    color: #fff;
+    border-radius: 12px;
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    box-shadow: 0 4px 18px rgba(46,204,113,0.35);
+    animation: resumeBannerIn 0.45s ease;
+}
+@keyframes resumeBannerIn {
+    0% { opacity: 0; transform: translateY(-10px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+.resume-banner-info { flex: 1 1 240px; min-width: 0; }
+.resume-banner-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+.resume-banner-title b { font-weight: 700; }
+.resume-banner-meta { font-size: 13px; opacity: 0.92; }
+.resume-banner-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.resume-banner-actions .btn-primary {
+    background: rgba(255,255,255,0.95);
+    color: #27ae60;
+    border: none;
+    font-weight: 600;
+}
+.resume-banner-actions .btn-primary:hover {
+    background: #fff;
+    color: #1e874b;
+    transform: translateY(-1px);
+}
+.resume-banner-actions .btn-danger {
+    background: rgba(0,0,0,0.18);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.4);
+}
+.resume-banner-actions .btn-danger:hover {
+    background: rgba(0,0,0,0.32);
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+    .resume-banner { padding: 12px 14px; gap: 10px; }
+    .resume-banner-title { font-size: 14px; }
+    .resume-banner-meta { font-size: 12px; }
+    .quiz-item .meta .meta-warn, .quiz-item .meta .meta-bm { font-size: 11px; padding: 2px 6px; }
+    .result-wrong-row { font-size: 13px; padding: 8px 12px; }
+}
+

@@ -103,3 +103,52 @@ Replace 2 existing modals (`#modal` for Format Guide, `#shortcutModal` for Short
 4. Update shortcut button onclick to use new floating card
 5. Add drag logic in `script.js` — pointer events for desktop + touch
 6. Test desktop + mobile
+
+---
+
+# v1.9.0 — Learn Smart (4 features)
+
+## Goals
+Biến app từ "máy chấm trắc nghiệm" thành công cụ ÔN TẬP THÔNG MINH.
+
+## 4 Features
+
+### 1. 🚩 Bookmark câu hỏi
+- Nút ⚐/🚩 góc trên-phải mỗi câu trong lúc làm bài
+- Ô câu trong panel trạng thái có viền vàng + dấu cờ nhỏ nếu đã đánh dấu
+- Storage `bookmarks_<quizId>` (array origIndex, idempotent qua shuffle)
+- Banner trong trang kết quả + nút "🔁 Làm lại các câu đánh dấu"
+- Quiz tạm `__bookmarkReviewOf` không persist
+
+### 2. 📝 Ghi chú câu sai
+- Textarea "Vì sao mình sai" trong .review-detail mỗi câu sai
+- Auto-save 800ms debounce + indicator trạng thái (⏳/✅/⚠️)
+- Storage `notes_<quizId>` → `{[origIndex]: text}` (giới hạn 2000 ký tự)
+- Khi làm lại đề, banner accordion 📝 hiện ghi chú cũ trên câu đó
+- Tương thích với quiz tạm — đọc/ghi note vào quiz GỐC
+
+### 3. 🔁 Ôn lại câu sai
+- Storage `wrongQuestions_<quizId>` → set origIndex
+- `updateWrongSet` sau mỗi submit: thêm câu sai, gỡ câu đúng (đã khắc phục)
+- Quiz card hiển thị badge "🔁 N sai" + nút "🔁 Ôn câu sai (N)"
+- Banner trong trang kết quả: nút "🔁 Ôn câu sai ngay" hoặc "🎉 Tuyệt!" nếu sạch
+- Quiz tạm `__wrongReviewOf` — submit cập nhật set quiz GỐC
+
+### 4. 💾 Resume bài đang dở
+- Auto-save mỗi 5s + trên visibilitychange/pagehide/beforeunload
+- Storage `resume_<quizId>` → snapshot (answers, timeLeft, qOrder, oOrders)
+- Hạn fresh 24h, quiz tạm (id<0) không lưu
+- Banner xanh lá trên trang chủ liệt kê các bài đang dở (mới nhất trước)
+- `resumeQuiz(id)` tái tạo shuffledQuiz từ snapshot, tick lại radio đã chọn
+- Tự xóa snapshot khi submit hoặc bắt đầu làm lại
+
+## Files Modified
+- `script.js` — 4 feature blocks + hook vào renderQuestionHTML / submitQuiz / startQuiz / _buildResultHtml / renderQuizList / window.onload
+- `style.css` — bookmark btn, notes accordion + textarea, wrong/bookmark badges, result-wrong/bookmark rows, resume banner
+- `index.html` — `<div id="resumeBannerHost">` trong section #home; bump `?v=1.9.0`
+- `sw.js` — CACHE_VERSION → `quizmaster-v1.9.0-learnsmart`
+
+## Verify
+- `node --check script.js` PASS
+- `node --check sw.js` PASS
+

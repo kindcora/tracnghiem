@@ -255,9 +255,23 @@ h3, h4 { color: var(--text-main); }
     box-shadow: 0 8px 25px rgba(124,140,248,0.3);
 }
 .result-box h3 { font-size: 48px; margin-bottom: 10px; }
-.review-question { padding: 15px; margin: 10px 0; border-radius: 8px; }
+.review-question { padding: 15px; margin: 10px 0; border-radius: 8px; transition: background 0.2s ease, transform 0.15s ease; }
 .correct { background: rgba(29,209,161,0.15); border-left: 4px solid var(--success); color: var(--text-main); }
 .wrong { background: rgba(238,82,83,0.15); border-left: 4px solid var(--danger); color: var(--text-main); }
+/* Câu sai có thể bấm để xem chi tiết */
+.review-question.wrong { cursor: pointer; user-select: none; }
+.review-question.wrong:hover { background: rgba(238,82,83,0.25); transform: translateX(2px); }
+.review-question.correct { cursor: default; }
+.review-toggle-hint {
+    display: inline-block;
+    margin-left: 8px;
+    font-size: 12px;
+    color: var(--danger);
+    opacity: 0.85;
+    font-weight: 600;
+}
+.review-question.wrong:not(.collapsed) .review-toggle-hint { opacity: 1; }
+.review-detail { line-height: 1.6; font-size: 14px; }
 
 /* === STATS === */
 .stats-overview { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 30px; }

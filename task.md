@@ -1,19 +1,26 @@
-# Task Checklist — Fix Firefox PC Cache Issue
+# Task Checklist — Fix Mobile Crash (Zalo / Safari)
 
-## Previous Fix (Mobile Crash)
-- [x] Task 1: Refactor `startQuiz()` to render questions in chunks (lazy rendering).
-- [x] Task 2: Ensure `resetCurrentQuestion()` and `updateQuestionStatusPanel()` still work.
-- [x] Task 3: Bump `CACHE_VERSION` in `sw.js`.
-- [x] Task 4: Add loading hint while chunks render.
-- [x] Task 5: Verify syntax with `node --check`.
+## Previous Fixes
+- [x] Task 1-5: Chunked rendering for `startQuiz()`.
+- [x] Task 6-14: Firefox cache fix + service worker improvements.
 
-## NEW Fix (Firefox PC: clicks do nothing — stuck on home)
-- [x] Task 6: Diagnose root cause → **Service Worker serving stale `script.js` on Firefox PC** (Firefox aggressively caches SW, doesn't auto-update like Chrome).
-- [x] Task 7: Rewrite `sw.js` fetch strategy → **Network-first for app shell** (html/js/css) so Firefox always gets fresh code; cache-first only for CDN/static assets. Falls back to cache when offline.
-- [x] Task 8: Bump cache version to `quizmaster-v1.3.0-firefoxfix`.
-- [x] Task 9: Improve `registerServiceWorker()` → auto `reg.update()` on load, auto `postMessage('SKIP_WAITING')` when new SW installed, listen to `controllerchange` to **auto-reload page once** (no manual reload needed).
-- [x] Task 10: Add `?v=1.3.0` cache-buster to `script.js`, `style.css`, `questions-data.js` in `index.html` to bypass HTTP cache.
-- [x] Task 11: Remove duplicate `<script src="questions-data.js">` tag in `<head>` (keep only the one before `script.js`).
-- [x] Task 12: Add emergency `clearCacheAndReload()` function + visible button on home page so users can self-recover when stuck on old cache.
-- [x] Task 13: Verify `node --check script.js && node --check sw.js` → PASS.
-- [x] Task 14: Final report.
+## NEW Fix (Mobile crash on "Ôn tập" — Zalo in-app browser + iOS Safari)
+Error: "đã có sự cố xảy ra liên tục với https://kindcora.github.io/tracnghiem/?zasrc=30...zalo"
+
+Root causes:
+1. **localStorage QuotaExceededError** — saving 450 questions (~250KB) every page load; Zalo WebView has tiny quota → uncaught exception → page crash.
+2. **No global error handler** — any uncaught error in mobile WebView triggers "repeatedly occurred" message.
+3. **Heavy `JSON.parse(JSON.stringify())`** on 450 questions in `prepareQuizForDoing()` — memory spike on low-end devices.
+4. **First 20 questions rendered synchronously** — still too heavy for older mobile.
+5. **No try-catch** in critical paths (`startQuiz`, `startPreloadedQuiz`, `loadPreloadedQuizzes`).
+
+- [x] Task 15: Wrap `localStorage.setItem` in safe helper with try-catch + quota fallback. (`safeSetItem` + `safeGetItem` added)
+- [x] Task 16: Stop persisting preloaded quizzes to localStorage (kept in memory with `__preloaded` flag; `saveQuizzes()` filters them out).
+- [x] Task 17: Replace `JSON.parse(JSON.stringify())` with lightweight shallow clone in `prepareQuizForDoing()`.
+- [x] Task 18: Added global `window.error` + `unhandledrejection` handlers showing toast instead of crashing.
+- [x] Task 19: Wrapped `startQuiz`, `startPreloadedQuiz`, `loadPreloadedQuizzes` in try-catch.
+- [x] Task 20: Reduced FIRST_BATCH from 20 → 10; chunkSize 25 → 15; switch view immediately before lazy render.
+- [x] Task 21: Bumped service worker `CACHE_VERSION` → `quizmaster-v1.4.0-mobilefix`.
+- [x] Task 22: Bumped asset version `?v=1.4.0` in `index.html`.
+- [x] Task 23: Verified with `node --check script.js && node --check sw.js` — both PASS.
+- [x] Task 24: Final report.

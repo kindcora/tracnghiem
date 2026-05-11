@@ -1,34 +1,53 @@
-# Roadmap — Fix Mobile Crash on "Ôn tập"
+# Roadmap — Fix Mobile Crash on "Ôn tập" (v1.4.0)
 
 ## Problem
-When tapping **"Ôn tập"** on mobile (especially **Zalo in-app browser**), the page crashes with:
-> A problem repeatedly occurred on https://kindcora.github.io/tracnghiem/...
+On mobile devices — especially **Zalo in-app browser** (URL contains `?zasrc=30...utm_source=zalo`) and **iOS Safari** — clicking **"Ôn tập"** causes the page to crash with:
+> Đã có sự cố xảy ra liên tục với https://kindcora.github.io/tracnghiem/?zasrc=30...
 
-## Root Cause
-`startQuiz()` in `script.js` (line 708) renders **ALL 450 questions at once** via a single `innerHTML` assignment:
-- 450 questions × (1 heading + 4 radio labels) ≈ 2,250+ DOM nodes
-- Single massive synchronous reflow
-- Exceeds memory limit of mobile WebView (especially Zalo's in-app browser)
-- Result: "A problem repeatedly occurred" crash
+This message appears on iOS Safari when the page throws an uncaught error or runs out of memory multiple times — Safari then refuses to keep reloading.
 
-## Fix Strategy — Chunked / Lazy Rendering
-1. Render first batch (e.g., 30 questions) immediately so user sees content fast.
-2. Defer remaining questions in batches of 30 via `requestIdleCallback` (fallback to `setTimeout`).
-3. Keep all existing features:
-   - Status panel (qspGrid) — already created separately, works fine
-   - `navigateQuestion`, `jumpToQuestion` — both use `querySelectorAll('.do-question')` AFTER they exist
-   - Swipe gestures, keyboard shortcuts — unchanged
-   - Auto-submit, scoring — unchanged
+## Root Causes Identified
 
-## Additional Improvements
-- Bump service worker cache version to force-refresh old cached code on devices.
-- Add a small "Đang tải đề..." hint while chunks render (optional).
+### 1. localStorage QuotaExceededError (PRIMARY)
+`loadPreloadedQuizzes()` and `startPreloadedQuiz()` call:
+```js
+localStorage.setItem('quizzes', JSON.stringify(quizzes));
+```
+With 450 questions (~250KB JSON), this can fail on:
+- **Zalo WebView** — very restricted storage quota (often <2MB)
+- **iOS Safari Private mode** — localStorage quota = 0, every write throws
+- **Older iOS** — 5MB total but already filled by other sites
+
+The throw is **uncaught** → page crashes → Safari shows "repeatedly occurred".
+
+### 2. No global error handler
+Any uncaught JS error or promise rejection in a mobile WebView triggers the OS-level "page crash" UI.
+
+### 3. Heavy deep clone
+`JSON.parse(JSON.stringify(quiz.questions))` on 450 questions allocates ~500KB twice → can trigger OOM on low-RAM phones.
+
+### 4. First 20 questions still sync
+Even with chunked rendering, the initial 20 questions are rendered synchronously via `innerHTML` — heavy on low-end devices.
+
+### 5. No try-catch on critical paths
+`startQuiz`, `startPreloadedQuiz`, `loadPreloadedQuizzes` — any failure cascades to full page crash.
+
+## Fix Strategy
+
+1. **Safe localStorage wrapper** — `safeSetItem()` that try-catches QuotaExceededError, falls back to in-memory only.
+2. **Don't persist preloaded quizzes** — `window.PRELOADED_QUIZZES` is reloaded fresh each visit anyway; only persist user-created quizzes.
+3. **Lightweight clone** — only clone the per-question fields actually mutated (options + correct), not the whole object tree.
+4. **Global error handlers** — `window.onerror` + `unhandledrejection` → show toast, swallow the error so Safari doesn't kill the page.
+5. **try-catch** in critical functions.
+6. **Smaller first batch** (10 instead of 20) + RAF-deferred initial paint.
+7. **Bump cache version** to force update on all devices.
 
 ## Tech Stack
-- Vanilla JS (no framework)
-- Service Worker for offline
-- localStorage for persistence
+- Vanilla JS
+- Service Worker (network-first for app shell)
+- localStorage (now with quota-safe wrapper)
 
 ## Files to Modify
-- `script.js` — refactor `startQuiz()` for chunked rendering
-- `sw.js` — bump CACHE_VERSION to invalidate old cached script.js
+- `script.js` — safe storage, error handlers, try-catch, lightweight clone
+- `sw.js` — bump CACHE_VERSION → v1.4.0-mobilefix
+- `index.html` — bump `?v=1.4.0` query params

@@ -1,9 +1,91 @@
+// ============================================
+// 🛡️ SAFE STORAGE & GLOBAL ERROR HANDLERS (v1.4.0)
+// Critical for mobile WebView (Zalo, iOS Safari) where:
+// - localStorage quota is very small (Zalo) or zero (Safari Private)
+// - Any uncaught error triggers "page repeatedly crashed"
+// ============================================
+
+// Safe JSON.parse with try-catch
+function safeGetItem(key, fallback) {
+    try {
+        const raw = localStorage.getItem(key);
+        if (raw == null) return fallback;
+        return JSON.parse(raw);
+    } catch (e) {
+        console.warn('[safeGetItem] failed for', key, e);
+        return fallback;
+    }
+}
+
+// Safe localStorage.setItem — never throws (catches QuotaExceededError)
+function safeSetItem(key, value) {
+    try {
+        const json = typeof value === 'string' ? value : JSON.stringify(value);
+        localStorage.setItem(key, json);
+        return true;
+    } catch (e) {
+        console.warn('[safeSetItem] failed for', key, '— quota exceeded or storage disabled. Continuing in-memory only.', e);
+        // Show non-blocking toast (only if toast function ready)
+        try {
+            if (typeof showToast === 'function') {
+                showToast('⚠️ Bộ nhớ trình duyệt đầy — dữ liệu chỉ giữ tạm thời', 'warning', 3000);
+            }
+        } catch (_) {}
+        return false;
+    }
+}
+
+// Global error handlers — swallow errors so mobile WebView doesn't kill the page
+window.addEventListener('error', function (ev) {
+    console.error('[GlobalError]', ev.message, ev.error);
+    try {
+        if (typeof showToast === 'function') {
+            showToast('⚠️ Có lỗi xảy ra: ' + (ev.message || 'unknown'), 'error', 3500);
+        }
+    } catch (_) {}
+    // Prevent default crash dialog
+    ev.preventDefault?.();
+    return true;
+});
+
+window.addEventListener('unhandledrejection', function (ev) {
+    console.error('[UnhandledRejection]', ev.reason);
+    try {
+        if (typeof showToast === 'function') {
+            showToast('⚠️ Tác vụ bị lỗi: ' + (ev.reason?.message || ev.reason || 'unknown'), 'error', 3500);
+        }
+    } catch (_) {}
+    ev.preventDefault?.();
+});
+
 let questions = [];
-let quizzes = JSON.parse(localStorage.getItem('quizzes')) || [];
-let history = JSON.parse(localStorage.getItem('history')) || [];
+let quizzes = safeGetItem('quizzes', []);
+let history = safeGetItem('history', []);
 let currentQuiz = null, shuffledQuiz = null;
 let userAnswers = {};
 let timerInterval = null, timeLeft = 0;
+
+// Helper: save only user-created quizzes (skip __preloaded ones to avoid quota errors)
+function saveQuizzes() {
+    try {
+        const userQuizzes = quizzes.filter(q => !q.__preloaded);
+        return safeSetItem('quizzes', userQuizzes);
+    } catch (e) {
+        console.warn('[saveQuizzes] failed:', e);
+        return false;
+    }
+}
+
+function saveHistory() {
+    try {
+        // Keep only last 50 entries to limit storage
+        const trimmed = history.length > 50 ? history.slice(-50) : history;
+        return safeSetItem('history', trimmed);
+    } catch (e) {
+        console.warn('[saveHistory] failed:', e);
+        return false;
+    }
+}
 // ============================================
 // 📡 OFFLINE MODE - SERVICE WORKER & PWA
 // ============================================
@@ -142,7 +224,7 @@ function installPWA() {
 
 function dismissInstall() {
     document.getElementById('installBanner')?.classList.remove('show');
-    localStorage.setItem('installDismissed', '1');
+    safeSetItem('installDismissed', '1');
 }
 
 /// ============================================
@@ -430,7 +512,7 @@ function toggleTheme() {
     const isLight = document.body.classList.contains('light-mode');
     document.getElementById('themeToggle').textContent = isLight ? '☀️' : '🌙';
     document.getElementById('themeToggle').title = isLight ? 'Chuyển sang chế độ tối' : 'Chuyển sang chế độ sáng';
-    localStorage.setItem('theme', isLight ? 'light' : 'dark');
+    safeSetItem('theme', isLight ? 'light' : 'dark');
     
     // Cập nhật biểu đồ nếu đang ở trang thống kê
     if (document.getElementById('stats').classList.contains('active')) {
@@ -742,7 +824,7 @@ function saveQuiz() {
         createdAt: new Date().toLocaleString('vi-VN')
     };
     quizzes.push(quiz);
-    localStorage.setItem('quizzes', JSON.stringify(quizzes));
+    saveQuizzes();
    showToast('Đã lưu đề thi!', 'success');
     questions = [];
     ['quizTitle','quizDesc'].forEach(id => document.getElementById(id).value = '');
@@ -761,27 +843,41 @@ function shuffleArray(arr) {
 }
 
 function prepareQuizForDoing(quiz) {
-    let qs = JSON.parse(JSON.stringify(quiz.questions));
-    // Trộn thứ tự đáp án trong mỗi câu
+    // v1.4.0 — Lightweight clone instead of JSON.parse(JSON.stringify(...))
+    // which doubles memory usage (~500KB for 450 questions). On low-RAM phones
+    // (Zalo WebView) this can trigger OOM crash.
+    // We only need to clone fields that get mutated: options (array) + correct (number).
+    // The original `quiz.questions` array stays untouched.
+    let qs;
     if (quiz.shuffleO) {
-        qs = qs.map(q => {
-            const indices = q.options.map((_, i) => i);
+        // Shallow-clone each question with NEW options array + correct index
+        qs = quiz.questions.map(q => {
+            const n = q.options.length;
+            const indices = new Array(n);
+            for (let i = 0; i < n; i++) indices[i] = i;
             const shuffled = shuffleArray(indices);
-            const newOpts = shuffled.map(i => q.options[i]);
+            const newOpts = new Array(n);
+            for (let i = 0; i < n; i++) newOpts[i] = q.options[shuffled[i]];
             const newCorrect = shuffled.indexOf(q.correct);
-            return { ...q, options: newOpts, correct: newCorrect };
+            // Only include fields we use during rendering / scoring
+            return { question: q.question, options: newOpts, correct: newCorrect };
         });
+    } else {
+        // No option shuffle → just keep a shallow copy of the array (references original questions)
+        qs = quiz.questions.slice();
     }
     // Trộn thứ tự câu hỏi
     if (quiz.shuffleQ) qs = shuffleArray(qs);
-    // Giới hạn số câu hỏi (chọn ngẫu nhiên N câu nếu đã trộn, hoặc N câu đầu nếu chưa)
+    // Giới hạn số câu hỏi
     const limit = parseInt(quiz.questionLimit, 10);
     if (!isNaN(limit) && limit > 0 && limit < qs.length) {
-        // Nếu chưa trộn câu, vẫn nên lấy ngẫu nhiên để "chọn số câu hỏi ngẫu nhiên"
         if (!quiz.shuffleQ) qs = shuffleArray(qs);
         qs = qs.slice(0, limit);
     }
-    return { ...quiz, questions: qs };
+    // Return a shallow-copied quiz (don't mutate original)
+    return { id: quiz.id, title: quiz.title, desc: quiz.desc, time: quiz.time,
+             shuffleQ: quiz.shuffleQ, shuffleO: quiz.shuffleO,
+             questionLimit: quiz.questionLimit, questions: qs };
 }
 
 // ============= DANH SÁCH ĐỀ =============
@@ -815,7 +911,7 @@ function renderQuizList() {
 function deleteQuiz(id) {
     if (!confirm('Xóa đề này?')) return;
     quizzes = quizzes.filter(q => q.id !== id);
-    localStorage.setItem('quizzes', JSON.stringify(quizzes));
+    saveQuizzes();
     renderQuizList();
 }
 
@@ -911,7 +1007,7 @@ function applyCustomizationToQuiz(id) {
     quiz.shuffleQ = shuffleQ;
     quiz.shuffleO = shuffleO;
     quiz.questionLimit = finalLimit;
-    localStorage.setItem('quizzes', JSON.stringify(quizzes));
+    saveQuizzes();
     return quiz;
 }
 
@@ -979,89 +1075,102 @@ function renderQuestionsInChunks(container, questions, chunkSize = 30) {
 }
 
 function startQuiz(id) {
-    currentQuiz = quizzes.find(q => q.id === id);
-    shuffledQuiz = prepareQuizForDoing(currentQuiz);
-    userAnswers = {};
-    document.getElementById('doQuizTitle').textContent = currentQuiz.title;
+    try {
+        currentQuiz = quizzes.find(q => q.id === id);
+        if (!currentQuiz) {
+            showToast('Không tìm thấy đề thi!', 'error');
+            return;
+        }
+        shuffledQuiz = prepareQuizForDoing(currentQuiz);
+        userAnswers = {};
+        document.getElementById('doQuizTitle').textContent = currentQuiz.title;
 
-    const container = document.getElementById('doQuizContent');
-    // Xoá nội dung cũ
-    container.innerHTML = '';
+        const container = document.getElementById('doQuizContent');
+        // Xoá nội dung cũ
+        container.innerHTML = '';
 
-    const questions = shuffledQuiz.questions;
-    const total = questions.length;
-    // Batch đầu tiên render ngay (hiển thị nhanh cho user), phần còn lại render lazy
-    const FIRST_BATCH = Math.min(20, total);
-    let firstHTML = '';
-    for (let i = 0; i < FIRST_BATCH; i++) {
-        firstHTML += renderQuestionHTML(questions[i], i);
-    }
-    container.innerHTML = firstHTML;
+        const questions = shuffledQuiz.questions;
+        const total = questions.length;
+        // v1.4.0 — Reduced FIRST_BATCH from 20 to 10 for low-end mobile (Zalo WebView)
+        const FIRST_BATCH = Math.min(10, total);
+        let firstHTML = '';
+        for (let i = 0; i < FIRST_BATCH; i++) {
+            firstHTML += renderQuestionHTML(questions[i], i);
+        }
+        container.innerHTML = firstHTML;
 
-    // Nếu còn câu hỏi -> thêm hint + lazy render phần còn lại
-    if (total > FIRST_BATCH) {
-        const hint = document.createElement('div');
-        hint.id = 'quizLoadingHint';
-        hint.style.cssText = 'text-align:center;padding:12px;color:#888;font-style:italic;font-size:14px';
-        hint.textContent = `⏳ Đang tải đề... ${FIRST_BATCH}/${total} câu`;
-        container.appendChild(hint);
-        // Lazy render phần còn lại theo chunk
-        const remaining = questions.slice(FIRST_BATCH);
-        // Tạo wrapper tạm để render tiếp (chèn TRƯỚC hint)
-        // Dễ nhất: render vào container, sau đó đảm bảo hint luôn ở cuối
-        let idx = FIRST_BATCH;
-        const chunkSize = 25;
-        const schedule = window.requestIdleCallback
-            ? (cb) => window.requestIdleCallback(cb, { timeout: 300 })
-            : (cb) => setTimeout(cb, 16);
-        function renderNext() {
-            if (idx >= total) {
-                const h = document.getElementById('quizLoadingHint');
-                if (h) h.remove();
-                return;
-            }
-            const end = Math.min(idx + chunkSize, total);
-            let html = '';
-            for (let i = idx; i < end; i++) {
-                html += renderQuestionHTML(questions[i], i);
-            }
-            const h = document.getElementById('quizLoadingHint');
-            if (h) {
-                h.insertAdjacentHTML('beforebegin', html);
-                idx = end;
-                h.textContent = `⏳ Đang tải đề... ${idx}/${total} câu`;
-                if (idx >= total) h.remove();
-            } else {
-                container.insertAdjacentHTML('beforeend', html);
-                idx = end;
+        // Switch view IMMEDIATELY so user sees content, before lazy-rendering rest
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+        document.getElementById('doQuiz').classList.add('active');
+        if (typeof closeMobileMenu === 'function') closeMobileMenu();
+        window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+
+        // Nếu còn câu hỏi -> thêm hint + lazy render phần còn lại
+        if (total > FIRST_BATCH) {
+            const hint = document.createElement('div');
+            hint.id = 'quizLoadingHint';
+            hint.style.cssText = 'text-align:center;padding:12px;color:#888;font-style:italic;font-size:14px';
+            hint.textContent = `⏳ Đang tải đề... ${FIRST_BATCH}/${total} câu`;
+            container.appendChild(hint);
+            // Lazy render phần còn lại theo chunk nhỏ (15) để mượt trên mobile
+            let idx = FIRST_BATCH;
+            const chunkSize = 15;
+            const schedule = window.requestIdleCallback
+                ? (cb) => window.requestIdleCallback(cb, { timeout: 300 })
+                : (cb) => setTimeout(cb, 16);
+            function renderNext() {
+                try {
+                    if (idx >= total) {
+                        const h = document.getElementById('quizLoadingHint');
+                        if (h) h.remove();
+                        return;
+                    }
+                    const end = Math.min(idx + chunkSize, total);
+                    let html = '';
+                    for (let i = idx; i < end; i++) {
+                        html += renderQuestionHTML(questions[i], i);
+                    }
+                    const h = document.getElementById('quizLoadingHint');
+                    if (h) {
+                        h.insertAdjacentHTML('beforebegin', html);
+                        idx = end;
+                        h.textContent = `⏳ Đang tải đề... ${idx}/${total} câu`;
+                        if (idx >= total) h.remove();
+                    } else {
+                        container.insertAdjacentHTML('beforeend', html);
+                        idx = end;
+                    }
+                    schedule(renderNext);
+                } catch (e) {
+                    console.error('[renderNext] chunk render error:', e);
+                    const h = document.getElementById('quizLoadingHint');
+                    if (h) h.textContent = '⚠️ Lỗi tải câu hỏi — đã dừng lazy render';
+                }
             }
             schedule(renderNext);
         }
-        schedule(renderNext);
-    }
 
-    timeLeft = shuffledQuiz.time * 60;
-    updateTimer();
-    timerInterval = setInterval(() => {
-        timeLeft--; updateTimer();
-        if (timeLeft <= 0) { clearInterval(timerInterval); submitQuiz(); }
-    }, 1000);
+        timeLeft = shuffledQuiz.time * 60;
+        updateTimer();
+        timerInterval = setInterval(() => {
+            timeLeft--; updateTimer();
+            if (timeLeft <= 0) { clearInterval(timerInterval); submitQuiz(); }
+        }, 1000);
 
-    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-    document.getElementById('doQuiz').classList.add('active');
-    // Đóng menu mobile nếu đang mở
-    if (typeof closeMobileMenu === 'function') closeMobileMenu();
-    // Cuộn lên đầu trang NGAY LẬP TỨC
-    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
-    requestAnimationFrame(() => {
-        window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
-        setTimeout(() => {
+        requestAnimationFrame(() => {
             window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
-        }, 50);
-    });
-    initQuestionStatusPanel();
-    updateProgress();
-    resetCurrentQuestion();
+            setTimeout(() => {
+                window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+            }, 50);
+        });
+        initQuestionStatusPanel();
+        updateProgress();
+        resetCurrentQuestion();
+    } catch (e) {
+        console.error('[startQuiz] fatal error:', e);
+        try { clearInterval(timerInterval); } catch (_) {}
+        try { showToast('⚠️ Lỗi khi bắt đầu bài thi: ' + (e.message || e), 'error', 5000); } catch (_) {}
+    }
 }
 
 function updateTimer() {
@@ -1108,7 +1217,7 @@ function submitQuiz() {
             date: new Date().toLocaleString('vi-VN'),
             timestamp: Date.now()
         });
-        localStorage.setItem('history', JSON.stringify(history));
+        saveHistory();
     } catch (e) {
         console.warn('Không lưu được lịch sử:', e);
     }
@@ -1149,10 +1258,20 @@ function submitQuiz() {
             const correctAnsText = (q.options[q.correct] !== undefined)
                 ? String.fromCharCode(65 + q.correct) + '. ' + escapeHtml(q.options[q.correct])
                 : '(N/A)';
-            return `<div class="review-question ${ok ? 'correct' : 'wrong'}">
-                <strong>Câu ${i + 1}: ${escapeHtml(q.question)}</strong><br>
-                Đáp án của bạn: ${userAnsText}<br>
-                Đáp án đúng: <strong>${correctAnsText}</strong>
+            if (ok) {
+                // Câu ĐÚNG: chỉ hiển thị câu hỏi + dấu ✓, click bỏ qua (không làm gì)
+                return `<div class="review-question correct" data-correct="1">
+                    <strong>✅ Câu ${i + 1}: ${escapeHtml(q.question)}</strong>
+                </div>`;
+            }
+            // Câu SAI: hiển thị thu gọn, click để mở chi tiết bên dưới
+            return `<div class="review-question wrong collapsed" data-correct="0" onclick="toggleReviewDetail(this)" title="Bấm để xem chi tiết">
+                <strong>❌ Câu ${i + 1}: ${escapeHtml(q.question)}</strong>
+                <span class="review-toggle-hint">▼ Bấm để xem đáp án</span>
+                <div class="review-detail" style="display:none;margin-top:10px;padding-top:10px;border-top:1px dashed rgba(238,82,83,0.4)">
+                    Đáp án của bạn: ${userAnsText}<br>
+                    Đáp án đúng: <strong>${correctAnsText}</strong>
+                </div>
             </div>`;
         } catch (e) {
             return `<div class="review-question wrong"><strong>Câu ${i + 1}: (lỗi hiển thị)</strong></div>`;
@@ -1520,44 +1639,59 @@ pieChartObj = new Chart(document.getElementById('pieChart'), {
 }
 
 // ============= BỘ ĐỀ ÔN TẬP CÓ SẴN (PRELOADED) =============
+// IMPORTANT (v1.4.0): Do NOT persist preloaded quizzes to localStorage.
+// They're loaded fresh every page from questions-data.js, and persisting them
+// (450 questions × ~250KB JSON) causes QuotaExceededError on Zalo WebView / iOS Safari Private mode
+// → uncaught error → "Đã có sự cố xảy ra liên tục" page crash.
+// Only user-created quizzes are persisted.
 function loadPreloadedQuizzes() {
-    if (!window.PRELOADED_QUIZZES || !Array.isArray(window.PRELOADED_QUIZZES)) return;
-    let added = 0;
-    let syncedQuestions = 0;
-    for (const pq of window.PRELOADED_QUIZZES) {
-        const existing = quizzes.find(q => q.id === pq.id);
-        if (existing) {
-            // Đồng bộ NỘI DUNG câu hỏi từ nguồn (khi bộ đề có cập nhật)
-            // KHÔNG ghi đè các cài đặt người dùng đã tùy chỉnh:
-            // time, shuffleQ, shuffleO, questionLimit
-            if (Array.isArray(pq.questions) && pq.questions.length !== existing.questions.length) {
-                existing.questions = pq.questions;
-                syncedQuestions++;
+    try {
+        if (!window.PRELOADED_QUIZZES || !Array.isArray(window.PRELOADED_QUIZZES)) return;
+        let added = 0;
+        let syncedQuestions = 0;
+        for (const pq of window.PRELOADED_QUIZZES) {
+            const existing = quizzes.find(q => q.id === pq.id);
+            if (existing) {
+                // Mark as preloaded so we can skip saving later
+                existing.__preloaded = true;
+                // Đồng bộ NỘI DUNG câu hỏi từ nguồn (khi bộ đề có cập nhật)
+                // KHÔNG ghi đè các cài đặt người dùng đã tùy chỉnh:
+                // time, shuffleQ, shuffleO, questionLimit
+                if (Array.isArray(pq.questions) && pq.questions.length !== existing.questions.length) {
+                    existing.questions = pq.questions;
+                    syncedQuestions++;
+                }
+                continue;
             }
-            continue;
+            // Add in-memory only; mark as preloaded so we don't write 250KB to localStorage
+            quizzes.push({ ...pq, __preloaded: true });
+            added++;
         }
-        quizzes.push(pq);
-        added++;
-    }
-    if (added > 0 || syncedQuestions > 0) {
-        localStorage.setItem('quizzes', JSON.stringify(quizzes));
-        if (added > 0) console.log(`✅ Đã nạp ${added} bộ đề ôn tập có sẵn`);
+        // Do NOT call localStorage.setItem here — keep preloaded quizzes in memory only.
+        if (added > 0) console.log(`✅ Đã nạp ${added} bộ đề ôn tập có sẵn (in-memory)`);
         if (syncedQuestions > 0) console.log(`🔄 Đã đồng bộ câu hỏi cho ${syncedQuestions} bộ đề`);
+    } catch (e) {
+        console.error('[loadPreloadedQuizzes] error:', e);
+        try { showToast('⚠️ Không thể nạp bộ đề ôn tập: ' + (e.message || e), 'error', 3500); } catch (_) {}
     }
 }
 
 function startPreloadedQuiz() {
-    if (!window.PRELOADED_QUIZZES || window.PRELOADED_QUIZZES.length === 0) {
-        return showToast('Chưa có bộ đề ôn tập!', 'error');
+    try {
+        if (!window.PRELOADED_QUIZZES || window.PRELOADED_QUIZZES.length === 0) {
+            return showToast('Chưa có bộ đề ôn tập!', 'error');
+        }
+        const pq = window.PRELOADED_QUIZZES[0];
+        // Ensure it exists in in-memory quizzes array (no localStorage write)
+        if (!quizzes.some(q => q.id === pq.id)) {
+            quizzes.push({ ...pq, __preloaded: true });
+        }
+        // Bắt đầu ôn tập ngay với cài đặt mặc định (không mở modal tùy chỉnh)
+        startQuiz(pq.id);
+    } catch (e) {
+        console.error('[startPreloadedQuiz] error:', e);
+        try { showToast('⚠️ Không thể bắt đầu ôn tập: ' + (e.message || e), 'error', 4000); } catch (_) {}
     }
-    const pq = window.PRELOADED_QUIZZES[0];
-    // Ensure it exists in quizzes array
-    if (!quizzes.some(q => q.id === pq.id)) {
-        quizzes.push(pq);
-        localStorage.setItem('quizzes', JSON.stringify(quizzes));
-    }
-    // Bắt đầu ôn tập ngay với cài đặt mặc định (không mở modal tùy chỉnh)
-    startQuiz(pq.id);
 }
 
 window.onload = () => { 
@@ -1589,3 +1723,32 @@ window.onload = () => {
 
 
 
+
+// ============= TOGGLE CHI TIẾT CÂU SAI (kết quả trắc nghiệm) =============
+// Khi ấn vào 1 câu trong phần kết quả:
+//  - Nếu là câu SAI -> hiển thị chi tiết đáp án (user / đúng) ngay bên dưới.
+//  - Nếu là câu ĐÚNG -> bỏ qua (không làm gì).
+function toggleReviewDetail(el) {
+    try {
+        if (!el) return;
+        // Câu đúng: bỏ qua hoàn toàn
+        if (el.dataset && el.dataset.correct === '1') return;
+        const detail = el.querySelector('.review-detail');
+        const hint = el.querySelector('.review-toggle-hint');
+        if (!detail) return;
+        const isOpen = detail.style.display !== 'none';
+        if (isOpen) {
+            detail.style.display = 'none';
+            el.classList.add('collapsed');
+            if (hint) hint.textContent = '▼ Bấm để xem đáp án';
+        } else {
+            detail.style.display = 'block';
+            el.classList.remove('collapsed');
+            if (hint) hint.textContent = '▲ Bấm để ẩn';
+        }
+    } catch (e) {
+        console.warn('toggleReviewDetail error:', e);
+    }
+}
+// Phơi ra global để onclick inline gọi được
+window.toggleReviewDetail = toggleReviewDetail;

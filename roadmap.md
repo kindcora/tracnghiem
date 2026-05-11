@@ -74,3 +74,32 @@ Because the project is a plain `<script>` (no modules), we'll:
 - Use Node's **built-in `node:test`** runner — zero deps, ships with Node 20+. Avoids polluting `package.json` with 100+ MB of vitest. We have Node 24, so `node --test` works perfectly.
 - Worker created lazily (only when needed) → no startup cost for typical users.
 - Worker file `stats-worker.js` must be cached by SW (otherwise offline breaks).
+
+---
+
+## v1.8.0 — Floating Card UI (Hướng dẫn định dạng & Phím tắt)
+
+### Goal
+Replace 2 existing modals (`#modal` for Format Guide, `#shortcutModal` for Shortcuts) with **draggable floating cards** that:
+- Float above page content (don't block interaction with the page)
+- Can be dragged around the screen by header bar
+- Can be minimized / closed
+- Have smooth slide-in animation
+- Snap to viewport edges (stay in bounds)
+- Persist position in localStorage (optional)
+
+### Design
+- New CSS class `.floating-card` — fixed positioning, top-right initial, drop-shadow, glassmorphism background
+- Header with: title, minimize button, close button — also serves as drag handle
+- Body with content (scrollable)
+- Min/max controls: minimize → only shows header (40px tall)
+- Dragging: pointer events, clamp to viewport, no select during drag
+- Mobile responsive: full-width with margin, drag still works via touch
+
+### Implementation Plan
+1. Add `.floating-card` CSS in `style.css`
+2. Replace `#modal` & `#shortcutModal` HTML structure to floating cards (keep IDs for JS compatibility OR add new wrappers)
+3. Update `showFormatGuide()` to use new floating card
+4. Update shortcut button onclick to use new floating card
+5. Add drag logic in `script.js` — pointer events for desktop + touch
+6. Test desktop + mobile

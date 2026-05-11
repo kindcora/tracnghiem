@@ -328,9 +328,9 @@ function initKeyboardShortcuts() {
             return; // Cho phép browser xử lý mặc định
         }
         
-        // === Esc: Đóng modal/menu ===
+        // === Esc: Đóng floating card/menu ===
         if (e.key === 'Escape') {
-            document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
+            document.querySelectorAll('.floating-card.active').forEach(m => m.classList.remove('active', 'minimized'));
             const nav = document.getElementById('mainNav');
             if (nav?.classList.contains('mobile-open')) toggleMobileMenu();
             return;
@@ -339,7 +339,7 @@ function initKeyboardShortcuts() {
         // === ? : Mở phím tắt (chỉ khi không gõ) ===
         if (e.key === '?' && !isTyping) {
             e.preventDefault();
-            document.getElementById('shortcutModal').style.display = 'block';
+            openFloatingCard('shortcutModal');
             return;
         }
         
@@ -817,11 +817,9 @@ function showSection(id, event) {
     // Ẩn panel trạng thái câu hỏi khi rời trang làm bài
     if (id !== 'doQuiz') hideQuestionStatusPanel();
     
-    // Đóng các modal đang mở (tùy chỉnh, hướng dẫn, phím tắt...) khi chuyển trang
-    const modal = document.getElementById('modal');
-    if (modal) modal.style.display = 'none';
-    const shortcutModal = document.getElementById('shortcutModal');
-    if (shortcutModal) shortcutModal.style.display = 'none';
+    // Đóng các floating card đang mở (hướng dẫn, phím tắt...) khi chuyển trang
+    closeFloatingCard('modal');
+    closeFloatingCard('shortcutModal');
     
     // Tự đóng menu mobile sau khi chọn
     closeMobileMenu();
@@ -857,13 +855,13 @@ function handleFeatureClick(action) {
             const quizzes = JSON.parse(localStorage.getItem('quizzes') || '[]');
             if (quizzes.length === 0) {
                 document.getElementById('modalContent').innerHTML = `
-                    <h2>📤 Xuất đề thi</h2>
+                    <h3>📤 Xuất đề thi</h3>
                     <p>Bạn chưa có đề thi nào để xuất. Hãy tạo hoặc nhập đề trước.</p>
                     <div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap">
-                        <button class="btn-primary" onclick="document.getElementById('modal').style.display='none';showSection('create')">➕ Tạo đề ngay</button>
-                        <button class="btn-secondary" onclick="document.getElementById('modal').style.display='none'">Đóng</button>
+                        <button class="btn-primary" onclick="closeFloatingCard('modal');showSection('create')">➕ Tạo đề ngay</button>
+                        <button class="btn-secondary" onclick="closeFloatingCard('modal')">Đóng</button>
                     </div>`;
-                document.getElementById('modal').style.display = 'block';
+                openFloatingCard('modal');
             } else {
                 showSection('list');
                 setTimeout(() => {
@@ -1055,7 +1053,6 @@ function renderQuizList() {
                 <button class="btn-secondary" data-action="customize">⚙️ Tùy chỉnh</button>
                 <button class="btn-info" data-action="csv">📄 CSV</button>
                 <button class="btn-info" data-action="word">📝 Word</button>
-                <button class="btn-danger" data-action="delete">🗑️</button>
             </div>
         </div>
     `).join('');
@@ -1158,10 +1155,10 @@ function customizeQuiz(id) {
         <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:20px">
             <button class="btn-primary" onclick="saveQuizCustomization(${id})">💾 Lưu cài đặt</button>
             <button class="btn-secondary" onclick="saveAndStartQuiz(${id})">▶️ Lưu &amp; Làm bài ngay</button>
-            <button class="btn-danger" onclick="document.getElementById('modal').style.display='none'" style="width:auto">✕ Hủy</button>
+            <button class="btn-danger" onclick="closeFloatingCard('modal')" style="width:auto">✕ Hủy</button>
         </div>
     `;
-    modal.style.display = 'block';
+    openFloatingCard('modal');
 }
 
 // Đọc dữ liệu từ modal & validate
@@ -1202,7 +1199,7 @@ function applyCustomizationToQuiz(id) {
 function saveQuizCustomization(id) {
     const quiz = applyCustomizationToQuiz(id);
     if (!quiz) return;
-    document.getElementById('modal').style.display = 'none';
+    closeFloatingCard('modal');
     const limitMsg = quiz.questionLimit ? `${quiz.questionLimit} câu ngẫu nhiên` : `tất cả ${quiz.questions.length} câu`;
     showToast(`✅ Đã lưu: ${quiz.time}p · ${limitMsg} · ${quiz.shuffleQ?'trộn câu':'giữ câu'} · ${quiz.shuffleO?'trộn đáp án':'giữ đáp án'}`, 'success', 4000);
     renderQuizList();
@@ -1211,7 +1208,7 @@ function saveQuizCustomization(id) {
 function saveAndStartQuiz(id) {
     const quiz = applyCustomizationToQuiz(id);
     if (!quiz) return;
-    document.getElementById('modal').style.display = 'none';
+    closeFloatingCard('modal');
     startQuiz(id);
 }
 
@@ -1839,18 +1836,17 @@ function exportWord(id) {
     });
 }
 
-// ============= HƯỚNG DẪN ĐỊNH DẠNG =============
+// ============= HƯỚNG DẪN ĐỊNH DẠNG (v1.8.0 — floating card) =============
 function showFormatGuide() {
     document.getElementById('modalContent').innerHTML = `
-        <h2>📋 Hướng Dẫn Định Dạng File</h2>
-        <h3>📄 File CSV:</h3>
-        <p>Cột: Câu hỏi | A | B | C | D | Đáp án đúng (A/B/C/D)</p>
+        <h3>📄 File CSV</h3>
+        <p>Cột: <b>Câu hỏi | A | B | C | D | Đáp án đúng</b> (A/B/C/D)</p>
         <pre>Câu hỏi,Đáp án A,Đáp án B,Đáp án C,Đáp án D,Đáp án đúng
 "2+2=?","3","4","5","6","B"
 "Thủ đô VN?","TPHCM","Hà Nội","Đà Nẵng","Huế","B"</pre>
         <p>👉 Bấm <b>"Tải mẫu CSV"</b> để có file mẫu sẵn.</p>
-        
-        <h3>📝 File Word (.docx):</h3>
+
+        <h3>📝 File Word (.docx)</h3>
         <p>Định dạng mỗi câu hỏi theo mẫu sau:</p>
         <pre>Câu 1: 2 + 2 = ?
 A. 3
@@ -1865,14 +1861,129 @@ B. Hà Nội
 C. Đà Nẵng
 D. Huế
 Đáp án: B</pre>
-        <p>⚠️ Lưu ý:</p>
-        <ul style="margin-left:20px">
+        <h3>⚠️ Lưu ý</h3>
+        <ul>
             <li>Mỗi câu bắt đầu bằng <b>"Câu [số]:"</b></li>
             <li>Đáp án bắt đầu bằng <b>A. B. C. D.</b></li>
             <li>Dòng cuối phải có <b>"Đáp án: [chữ]"</b></li>
         </ul>
+        <div class="fc-tip">💡 Kéo header để di chuyển thẻ nổi này đến vị trí bạn muốn!</div>
     `;
-    document.getElementById('modal').style.display = 'block';
+    openFloatingCard('modal');
+}
+
+// ============= FLOATING CARD HELPERS (v1.8.0) =============
+/** Open a floating card by id and bring to front */
+function openFloatingCard(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    // Bring to front by raising z-index above siblings
+    document.querySelectorAll('.floating-card.active').forEach(c => { c.style.zIndex = 1500; });
+    el.style.zIndex = 1501;
+    el.classList.add('active');
+    el.classList.remove('minimized');
+    // Restore saved position if any
+    try {
+        const saved = JSON.parse(localStorage.getItem('fc_pos_' + id) || 'null');
+        if (saved && typeof saved.left === 'number' && typeof saved.top === 'number') {
+            clampAndApplyPos(el, saved.left, saved.top);
+        }
+    } catch (_) { /* ignore */ }
+    initFloatingCardDrag(el);
+}
+
+/** Close a floating card by id */
+function closeFloatingCard(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove('active', 'minimized');
+}
+
+/** Toggle minimize/maximize */
+function toggleFloatingCard(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.toggle('minimized');
+    const btn = el.querySelector('.fc-min');
+    if (btn) btn.textContent = el.classList.contains('minimized') ? '▢' : '—';
+}
+
+/** Clamp position to viewport and apply via inline style */
+function clampAndApplyPos(el, left, top) {
+    const rect = el.getBoundingClientRect();
+    const w = rect.width || el.offsetWidth || 320;
+    const h = rect.height || el.offsetHeight || 60;
+    const maxLeft = Math.max(0, window.innerWidth - w);
+    const maxTop = Math.max(0, window.innerHeight - h);
+    const cL = Math.min(Math.max(0, left), maxLeft);
+    const cT = Math.min(Math.max(0, top), maxTop);
+    el.style.left = cL + 'px';
+    el.style.top = cT + 'px';
+    el.style.right = 'auto';
+    el.style.bottom = 'auto';
+}
+
+/** Attach drag behavior to a floating card (idempotent) */
+function initFloatingCardDrag(card) {
+    if (!card || card._dragInit) return;
+    card._dragInit = true;
+    const header = card.querySelector('.fc-header');
+    if (!header) return;
+    let startX = 0, startY = 0, startLeft = 0, startTop = 0, dragging = false;
+
+    const onDown = (e) => {
+        // Ignore clicks on buttons inside header
+        if (e.target.closest('.fc-btn')) return;
+        const point = e.touches ? e.touches[0] : e;
+        const rect = card.getBoundingClientRect();
+        startLeft = rect.left;
+        startTop = rect.top;
+        startX = point.clientX;
+        startY = point.clientY;
+        dragging = true;
+        card.classList.add('dragging');
+        // Lock to inline position so dragging works
+        card.style.left = startLeft + 'px';
+        card.style.top = startTop + 'px';
+        card.style.right = 'auto';
+        card.style.bottom = 'auto';
+        e.preventDefault();
+    };
+    const onMove = (e) => {
+        if (!dragging) return;
+        const point = e.touches ? e.touches[0] : e;
+        const dx = point.clientX - startX;
+        const dy = point.clientY - startY;
+        clampAndApplyPos(card, startLeft + dx, startTop + dy);
+        e.preventDefault();
+    };
+    const onUp = () => {
+        if (!dragging) return;
+        dragging = false;
+        card.classList.remove('dragging');
+        // Persist position
+        try {
+            const id = card.id;
+            localStorage.setItem('fc_pos_' + id, JSON.stringify({
+                left: parseFloat(card.style.left) || 0,
+                top: parseFloat(card.style.top) || 0
+            }));
+        } catch (_) { /* ignore */ }
+    };
+
+    header.addEventListener('mousedown', onDown);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    header.addEventListener('touchstart', onDown, { passive: false });
+    window.addEventListener('touchmove', onMove, { passive: false });
+    window.addEventListener('touchend', onUp);
+}
+
+// Auto-init all floating cards once DOM is ready
+if (typeof document !== 'undefined') {
+    document.addEventListener('DOMContentLoaded', () => {
+        document.querySelectorAll('.floating-card').forEach(initFloatingCardDrag);
+    });
 }
 
 // ============= THỐNG KÊ (v1.5.0 — enhanced) =============

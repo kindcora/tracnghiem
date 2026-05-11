@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/192/3976/3976625.png">
 <title>QuizMaster Pro - Tạo Đề Trắc Nghiệm</title>
-<link rel="stylesheet" href="style.css?v=1.7.0">
+<link rel="stylesheet" href="style.css?v=1.8.0">
 <!-- Thư viện đọc file Word (.docx) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 <!-- Thư viện tạo file Word -->
@@ -281,20 +281,29 @@
     </div>
 </section>
 
-<!-- Modal hướng dẫn -->
-<div id="modal" class="modal">
-    <div class="modal-content">
-        <span class="close" onclick="document.getElementById('modal').style.display='none'">&times;</span>
-        <div id="modalContent"></div>
+<!-- Floating Card: Hướng dẫn định dạng (v1.8.0) -->
+<div id="modal" class="floating-card" data-fc-id="formatGuide">
+    <div class="fc-header">
+        <div class="fc-title">📋 Hướng dẫn định dạng</div>
+        <div class="fc-controls">
+            <button class="fc-btn fc-min" onclick="toggleFloatingCard('modal')" title="Thu gọn/Mở rộng">—</button>
+            <button class="fc-btn fc-close" onclick="closeFloatingCard('modal')" title="Đóng">✕</button>
+        </div>
     </div>
+    <div class="fc-body" id="modalContent"></div>
 </div>
-<!-- Modal hiển thị phím tắt -->
-<div id="shortcutModal" class="modal">
-    <div class="modal-content">
-        <span class="close" onclick="document.getElementById('shortcutModal').style.display='none'">&times;</span>
-        <h2>⌨️ Phím Tắt</h2>
-        
-        <h3>🌐 Toàn trang:</h3>
+
+<!-- Floating Card: Phím tắt (v1.8.0) -->
+<div id="shortcutModal" class="floating-card" data-fc-id="shortcut">
+    <div class="fc-header">
+        <div class="fc-title">⌨️ Phím tắt</div>
+        <div class="fc-controls">
+            <button class="fc-btn fc-min" onclick="toggleFloatingCard('shortcutModal')" title="Thu gọn/Mở rộng">—</button>
+            <button class="fc-btn fc-close" onclick="closeFloatingCard('shortcutModal')" title="Đóng">✕</button>
+        </div>
+    </div>
+    <div class="fc-body">
+        <h3>🌐 Toàn trang</h3>
         <table class="shortcut-table">
             <tr><td><kbd>?</kbd> hoặc <kbd>Shift</kbd>+<kbd>/</kbd></td><td>Hiện bảng phím tắt này</td></tr>
             <tr><td><kbd>Alt</kbd>+<kbd>1</kbd></td><td>Trang chủ</td></tr>
@@ -302,17 +311,17 @@
             <tr><td><kbd>Alt</kbd>+<kbd>3</kbd></td><td>Danh sách đề</td></tr>
             <tr><td><kbd>Alt</kbd>+<kbd>4</kbd></td><td>Thống kê</td></tr>
             <tr><td><kbd>Alt</kbd>+<kbd>D</kbd></td><td>Chuyển sáng/tối</td></tr>
-            <tr><td><kbd>Esc</kbd></td><td>Đóng modal/menu</td></tr>
+            <tr><td><kbd>Esc</kbd></td><td>Đóng popup/menu</td></tr>
         </table>
-        
-        <h3>✏️ Khi tạo đề:</h3>
+
+        <h3>✏️ Khi tạo đề</h3>
         <table class="shortcut-table">
             <tr><td><kbd>Ctrl</kbd>+<kbd>N</kbd></td><td>Thêm câu hỏi mới</td></tr>
             <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>Lưu đề thi</td></tr>
             <tr><td><kbd>Ctrl</kbd>+<kbd>Delete</kbd></td><td>Xóa tất cả</td></tr>
         </table>
-        
-        <h3>🎯 Khi làm bài:</h3>
+
+        <h3>🎯 Khi làm bài</h3>
         <table class="shortcut-table">
             <tr><td><kbd>A</kbd> / <kbd>B</kbd> / <kbd>C</kbd> / <kbd>D</kbd></td><td>Chọn đáp án</td></tr>
             <tr><td><kbd>1</kbd> / <kbd>2</kbd> / <kbd>3</kbd> / <kbd>4</kbd></td><td>Chọn đáp án (số)</td></tr>
@@ -321,17 +330,20 @@
             <tr><td><kbd>Enter</kbd></td><td>Nộp bài (khi đã làm hết)</td></tr>
             <tr><td><kbd>Ctrl</kbd>+<kbd>Enter</kbd></td><td>Nộp bài ngay</td></tr>
         </table>
-        
-        <p style="margin-top:20px;padding:12px;background:rgba(124,140,248,0.1);border-radius:8px;text-align:center">
-            💡 <b>Mẹo:</b> Bấm <kbd>?</kbd> bất kỳ lúc nào để mở lại bảng này
-        </p>
+
+        <div class="fc-tip">💡 <b>Mẹo:</b> Kéo header để di chuyển thẻ nổi · Bấm <kbd>?</kbd> để mở lại bảng này</div>
     </div>
 </div>
 
 <!-- Nút phím tắt floating -->
-<button class="shortcut-btn" onclick="document.getElementById('shortcutModal').style.display='block'" title="Phím tắt (?)">⌨️</button>
+<button class="shortcut-btn" onclick="openFloatingCard('shortcutModal')" title="Phím tắt (?)">⌨️</button>
+
+<!-- Footer credit -->
+<footer class="site-footer" style="text-align:center;padding:20px 16px;margin-top:40px;color:#888;font-size:13px;border-top:1px solid rgba(136,136,136,0.2)">
+    <p style="margin:0">© QuizMaster Pro · <b>Cre: KindCora</b> 💜</p>
+</footer>
 
 <script src="questions-data.js?v=1.7.0"></script>
-<script src="script.js?v=1.7.0"></script>
+<script src="script.js?v=1.8.0"></script>
 </body>
 </html>

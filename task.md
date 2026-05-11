@@ -35,3 +35,31 @@
 - [x] Task 24: `node --check stats-worker.js` PASS
 - [x] Task 25: `npm test` (node --test) PASS — 22/22 ✅
 - [x] Task 26: Final report
+
+---
+
+# Task Checklist — v1.8.0 (Floating Card UI)
+
+## 🎨 CSS
+- [x] Task 1: Add `.floating-card` styles (fixed pos, glassmorphism, shadow, animation)
+- [x] Task 2: Add `.fc-header`, `.fc-body`, `.fc-controls` styles
+- [x] Task 3: Add `.fc-minimized` state (collapsed to header)
+- [x] Task 4: Mobile responsive styles
+
+## 🏗️ HTML
+- [x] Task 5: Replace `#modal` markup with floating card structure (keep id for JS compat)
+- [x] Task 6: Replace `#shortcutModal` markup with floating card structure
+
+## ⚙️ JS
+- [x] Task 7: Update `showFormatGuide()` — open as floating card
+- [x] Task 8: Add `openFloatingCard(id)` / `closeFloatingCard(id)` helpers
+- [x] Task 9: Add drag logic (pointer events + touch)
+- [x] Task 10: Add minimize/maximize toggle
+- [x] Task 11: Keep Esc closes, ? toggles shortcut card
+- [x] Task 11b: Migrate customizeQuiz/saveQuizCustomization/export-no-quizzes to floating card
+- [x] Task 11c: Bump version to v1.8.0 (CSS, JS, SW cache)
+
+## ✅ Verify
+- [x] Task 12: `node --check script.js` PASS
+- [x] Task 13: `node --check sw.js` PASS
+- [ ] Task 14: Manual test desktop + mobile (user action)

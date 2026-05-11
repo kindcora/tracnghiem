@@ -1,5 +1,5 @@
 // Service Worker - QuizMaster Pro
-const CACHE_VERSION = 'quizmaster-v1.7.0-swr-worker';
+const CACHE_VERSION = 'quizmaster-v1.8.0-floating-card';
 const CACHE_NAME = CACHE_VERSION;
 
 // Files cần cache để chạy offline

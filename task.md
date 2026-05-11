@@ -1,48 +1,37 @@
-# Task Checklist — v1.6.1 (Complete Deferred Tasks)
+# Task Checklist — v1.7.0
 
-## Previous Versions (DONE)
-- [x] v1.4.0 — Mobile crash fix (Zalo/Safari quota, error handlers)
-- [x] v1.5.0 — Enhanced statistics + UI/UX
-- [x] v1.6.0 — Practice Mode, Flashcards, Dark Mode, Performance (partial)
+## 🔄 Service Worker SWR
+- [x] Task 1: Detect `questions-data.js` request in sw.js fetch handler
+- [x] Task 2: Implement stale-while-revalidate (return cached, refresh in background)
+- [x] Task 3: Add `stats-worker.js` to STATIC_FILES (precache)
+- [x] Task 4: Bump CACHE_VERSION to `quizmaster-v1.7.0-swr-worker`
 
----
+## 👷 Web Worker for stats
+- [x] Task 5: Create `stats-worker.js` — pure compute on `self.onmessage`
+- [x] Task 6: Add `computeStatsAsync()` wrapper in script.js (uses worker if history>500)
+- [x] Task 7: Wire `renderStats` to await async path when needed (still sync if small)
+- [x] Task 8: Cache worker instance + terminate on idle
 
-## v1.6.1 — Completing All Deferred Tasks from v1.6.0
+## 📝 JSDoc types
+- [x] Task 9: JSDoc `_collectQuizAnswers`
+- [x] Task 10: JSDoc `_calculateQuizScore`
+- [x] Task 11: JSDoc `_buildResultHtml`
+- [x] Task 12: JSDoc `_saveQuizHistory`
+- [x] Task 13: JSDoc `computeStatsOverview` / `computePerQuizStats`
+- [x] Task 14: Add typedef `QuizQuestion`, `HistoryEntry`, `ScoreInfo`, `StatsOverview`
 
-### 🌙 OLED Dark Mode
-- [x] Task 1: Add OLED (true-black) sub-mode toggle in theme settings
-- [x] Task 2: Add CSS `.oled-mode` overrides (#000 background)
-- [x] Task 3: Persist OLED preference in localStorage
+## 🧪 Unit tests (node:test)
+- [x] Task 15: Create `lib/pure.cjs` with the four pure helpers (mirror of script.js)
+- [x] Task 16: Create `tests/pure.test.cjs` — tests for `_collectQuizAnswers`
+- [x] Task 17: Tests for `_calculateQuizScore` (all 4 grade buckets)
+- [x] Task 18: Tests for `computeStatsOverview`
+- [x] Task 19: Tests for `computePerQuizStats`
+- [x] Task 20: Update `package.json` — add `test` script using `node --test`
 
-### ⚡ Performance: Debounce Search
-- [x] Task 4: Create generic `debounce(fn, ms)` helper utility
-- [x] Task 5: Apply 300ms debounce to `searchQuiz` input (renderQuizList)
-- [x] Task 6: Apply 300ms debounce to `historySearch` input
-
-### ⚡ Performance: DocumentFragment (AUDITED — already optimal)
-- [x] Task 7: Audit `renderQuizList()` — uses `arr.map().join('')` single innerHTML (faster than DocFragment for HTML strings)
-- [x] Task 8: Audit `renderHistoryList()` / `renderPerQuizStats()` / `renderTimeWindowStats()` — same optimal pattern
-- [x] Task 9: No `innerHTML +=` patterns found in codebase (grep confirmed 0 matches)
-
-### 🧩 Refactor: Split submitQuiz
-- [x] Task 10: Identify logical chunks in `submitQuiz()` (~185 lines)
-- [x] Task 11: Extract `_collectQuizAnswers()` helper
-- [x] Task 12: Extract `_calculateQuizScore()` helper
-- [x] Task 13: Extract `_buildResultHtml()` helper
-- [x] Task 14: Extract `_saveQuizHistory()` helper (with stats cache invalidation hook)
-
-### 💾 Performance: Memoize Stats
-- [x] Task 15: Add stats cache invalidated on history mutation (saveHistory hook)
-- [x] Task 16: Memoize `computeStatsOverview()` / overview numbers
-- [x] Task 17: Memoize `computePerQuizStats()` per-quiz aggregation
-
-### 🎯 Performance: Event Delegation
-- [x] Task 18: Replace 7×N onclick on quiz cards with delegated #quizList handler (data-action)
-- [x] Task 19: Replace per-row onclick on history list with delegated #historyList handler (data-ts)
-
-### 🧪 Verification
-- [x] Task 20: Bump versions to `?v=1.6.1` in index.html (style.css, questions-data.js, script.js)
-- [x] Task 21: Bump SW CACHE_VERSION to `quizmaster-v1.6.1-deferred-done`
-- [x] Task 22: `node --check script.js` — syntax PASS ✅
-- [x] Task 23: `node --check sw.js` — syntax PASS ✅
-- [x] Task 24: Final report
+## 🔁 Verification
+- [x] Task 21: Bump versions to `?v=1.7.0` in index.html
+- [x] Task 22: `node --check sw.js` PASS
+- [x] Task 23: `node --check script.js` PASS
+- [x] Task 24: `node --check stats-worker.js` PASS
+- [x] Task 25: `npm test` (node --test) PASS — 22/22 ✅
+- [x] Task 26: Final report

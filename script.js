@@ -114,6 +114,62 @@ function invalidateStatsCache() {
     __statsCache.timeWindow = null;
 }
 
+// ============================================
+// 👷 v1.7.0 — Web Worker for stats (lazy)
+// Only spawn worker when history is large (>500 entries) to avoid blocking
+// the main thread during aggregation. For small history the sync path is
+// faster than the postMessage round-trip.
+// ============================================
+const STATS_WORKER_THRESHOLD = 500;
+let __statsWorker = null;
+let __statsWorkerMsgId = 0;
+function _getStatsWorker() {
+    if (__statsWorker) return __statsWorker;
+    if (typeof Worker === 'undefined') return null;
+    try {
+        __statsWorker = new Worker('stats-worker.js?v=1.7.0');
+        return __statsWorker;
+    } catch (e) {
+        console.warn('[stats] Worker init failed, falling back to sync:', e);
+        return null;
+    }
+}
+/**
+ * Async wrapper: returns {overview, perQuiz}. Uses worker for big history,
+ * sync compute otherwise. Always resolves (never rejects) — falls back on err.
+ * @returns {Promise<{overview:StatsOverview, perQuiz:Array}>}
+ */
+function computeStatsAsync() {
+    return new Promise(resolve => {
+        if (history.length <= STATS_WORKER_THRESHOLD) {
+            resolve({ overview: computeStatsOverview(), perQuiz: computePerQuizStats() });
+            return;
+        }
+        const w = _getStatsWorker();
+        if (!w) {
+            resolve({ overview: computeStatsOverview(), perQuiz: computePerQuizStats() });
+            return;
+        }
+        const id = ++__statsWorkerMsgId;
+        const onMsg = (ev) => {
+            if (!ev.data || ev.data.id !== id) return;
+            w.removeEventListener('message', onMsg);
+            if (ev.data.ok) {
+                __statsCache.overview = ev.data.result.overview;
+                __statsCache.perQuiz = ev.data.result.perQuiz;
+                resolve(ev.data.result);
+            } else {
+                console.warn('[stats] Worker error, sync fallback:', ev.data.error);
+                resolve({ overview: computeStatsOverview(), perQuiz: computePerQuizStats() });
+            }
+        };
+        w.addEventListener('message', onMsg);
+        // Send a shallow copy to avoid leaking live references
+        w.postMessage({ id, type: 'both', history: history.slice() });
+    });
+}
+window.computeStatsAsync = computeStatsAsync;
+
 
 // ============================================
 // 📡 OFFLINE MODE - SERVICE WORKER & PWA
@@ -1324,11 +1380,56 @@ function updateProgress() {
     updateQuestionStatusPanel();
 }
 
-// ============= submitQuiz HELPERS (v1.6.1 refactor) =============
+// ============= submitQuiz HELPERS (v1.6.1 refactor, v1.7.0 typed) =============
 // Split into 4 helpers for clarity & testability. All keep the same
 // defensive try/catch + WebView-safe semantics as the original code.
+//
+// v1.7.0: JSDoc typedefs (gives VS Code type-checking & autocomplete)
+/**
+ * @typedef {Object} QuizQuestion
+ * @property {string} question
+ * @property {string[]} options
+ * @property {number} correct - Index of the correct option
+ * @property {string} [explanation]
+ */
+/**
+ * @typedef {Object} ScoreInfo
+ * @property {string} score - Score 0–10 (2 decimals)
+ * @property {number} scoreNum - Score as float
+ * @property {number} percent - 0–100
+ * @property {'excellent'|'good'|'average'|'weak'} grade
+ * @property {string} emoji
+ * @property {string} label
+ * @property {string} scoreClass - CSS class
+ */
+/**
+ * @typedef {Object} HistoryEntry
+ * @property {number} quizId
+ * @property {string} quizTitle
+ * @property {number} score
+ * @property {number} correct
+ * @property {number} total
+ * @property {number} [timeSpent]
+ * @property {number} [timestamp]
+ * @property {string} [date]
+ */
+/**
+ * @typedef {Object} StatsOverview
+ * @property {number} total
+ * @property {string} avg
+ * @property {string} max
+ * @property {number} uniqueQuizzes
+ * @property {number} streak
+ * @property {number} totalTime
+ * @property {number} passRate
+ */
 
-// (1) Collect answers + count correct in a single pass.
+/**
+ * (1) Collect answers + count correct in a single pass.
+ * @param {QuizQuestion[]} questions
+ * @param {Object<number, number>} answers - Map of questionIndex → selectedOptionIndex
+ * @returns {{total:number, correct:number}}
+ */
 function _collectQuizAnswers(questions, answers) {
     const total = questions.length;
     let correct = 0;
@@ -1338,7 +1439,12 @@ function _collectQuizAnswers(questions, answers) {
     return { total, correct };
 }
 
-// (2) Compute score (0–10), percent, grade label/emoji/CSS class.
+/**
+ * (2) Compute score (0–10), percent, grade label/emoji/CSS class.
+ * @param {number} correct
+ * @param {number} total
+ * @returns {ScoreInfo}
+ */
 function _calculateQuizScore(correct, total) {
     const score = ((correct / total) * 10).toFixed(2);
     const percent = Math.round((correct / total) * 100);
@@ -1359,7 +1465,15 @@ function _calculateQuizScore(correct, total) {
     return { score, scoreNum, percent, grade, emoji, label, scoreClass };
 }
 
-// (3) Build the result HTML shown to the user (top score box + review header).
+/**
+ * (3) Build the result HTML shown to the user (top score box + review header).
+ * @param {ScoreInfo} scoreInfo
+ * @param {number} correct
+ * @param {number} total
+ * @param {string} timeStr - Formatted duration (e.g. '1:23')
+ * @param {boolean} reviewVisible - Whether the detailed review is currently shown
+ * @returns {string} HTML string
+ */
 function _buildResultHtml(scoreInfo, correct, total, timeStr, reviewVisible) {
     const { score, percent, emoji, label, scoreClass } = scoreInfo;
     return `
@@ -1389,8 +1503,14 @@ function _buildResultHtml(scoreInfo, correct, total, timeStr, reviewVisible) {
     `;
 }
 
-// (4) Persist the attempt into history (safe against localStorage quota).
-// Also invalidates the stats memo cache (v1.6.1).
+/**
+ * (4) Persist the attempt into history (safe against localStorage quota).
+ * Also invalidates the stats memo cache (v1.6.1).
+ * @param {number} score - Score 0–10
+ * @param {number} correct
+ * @param {number} total
+ * @returns {void}
+ */
 function _saveQuizHistory(score, correct, total) {
     try {
         const timeSpent = window.__quizStartedAt
@@ -1924,8 +2044,12 @@ function exportHistoryCSV() {
     try { showToast('📥 Đã xuất CSV', 'success', 1800); } catch (_) {}
 }
 
-// Render per-quiz stats card (top 5 most attempted)
-// v1.6.1 — Memoized per-quiz aggregation. Cache invalidated on history mutation.
+/**
+ * Render per-quiz stats card (top 6 most attempted).
+ * v1.6.1 — Memoized per-quiz aggregation. Cache invalidated on history mutation.
+ * v1.7.0 — JSDoc typed.
+ * @returns {Array<{title:string, attempts:number, sum:number, best:number}>}
+ */
 function computePerQuizStats() {
     if (__statsCache.perQuiz) return __statsCache.perQuiz;
     const map = new Map();
@@ -1989,8 +2113,12 @@ function renderTimeWindowStats() {
     }).join('');
 }
 
-// v1.6.1 — Memoized overview computation. Cache is invalidated on every
-// saveHistory() / clearHistory() via invalidateStatsCache().
+/**
+ * v1.6.1 — Memoized overview computation. Cache is invalidated on every
+ * saveHistory() / clearHistory() via invalidateStatsCache().
+ * v1.7.0 — JSDoc typed.
+ * @returns {StatsOverview}
+ */
 function computeStatsOverview() {
     if (__statsCache.overview) return __statsCache.overview;
     const total = history.length;

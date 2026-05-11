@@ -1,91 +1,76 @@
-# Roadmap — Fix Mobile Crash on "Ôn tập" (v1.4.0)
+# Roadmap — v1.7.0 (Performance + Quality)
 
-## Problem
-On mobile devices — especially **Zalo in-app browser** (URL contains `?zasrc=30...utm_source=zalo`) and **iOS Safari** — clicking **"Ôn tập"** causes the page to crash.
-
-## Fix Strategy (Done)
-1. Safe localStorage wrapper — `safeSetItem()` that try-catches QuotaExceededError
-2. Don't persist preloaded quizzes
-3. Lightweight clone instead of deep JSON clone
-4. Global error handlers
-5. Smaller first batch + RAF-deferred paint
-6. Cache version bump
+## Previous Versions
+- v1.4.0 — Mobile crash fix
+- v1.5.0 — Enhanced statistics
+- v1.6.0 — Practice Mode, Flashcards, Dark Mode
+- v1.6.1 — Deferred performance tasks (memo, debounce, refactor)
 
 ---
 
-# v1.5.0 — UI/UX + Enhanced Statistics (DONE)
-- Streak counter, per-quiz stats, time-window stats
-- Export history CSV, filter history
-- Modern stat cards, history management
+## v1.7.0 — Goals
 
----
+### 1. 🔄 Service Worker stale-while-revalidate for `questions-data.js`
+**Problem:** `questions-data.js` (~250 KB) is currently treated as app-shell → network-first → forced reload required for fresh data.
+**Goal:** Use **stale-while-revalidate (SWR)** so:
+- User sees cached version IMMEDIATELY (fast)
+- A fresh copy is fetched in background
+- New quiz set is available on next page load — no forced reload required
 
-# v1.6.0 — Practice Mode, Flashcards, Dark Mode, Performance
+**Implementation:**
+- In `sw.js`, special-case requests matching `/questions-data\.js/`
+- Return cached response if any (fast), kick off background `fetch` to update cache
+- Bump `CACHE_VERSION` to `quizmaster-v1.7.0-swr-worker`
 
-## Goals
-1. **Practice Mode (Luyện tập)** — Learn-by-doing without time pressure
-2. **Flashcard Mode** — Visual card-based study for memorization
-3. **Better Dark Mode** — Improved contrast, OLED black, system-pref detection
-4. **Performance refactor** — Optimize hot paths, event delegation, reduce reflows
+### 2. 👷 Web Worker for stats (history > 500 entries)
+**Problem:** `computeStatsOverview` / `computePerQuizStats` block the main thread when history grows huge.
+**Goal:** Off-load heavy aggregation to a Web Worker once `history.length > 500`.
 
-## New Features Detailed
+**Implementation:**
+- New file `stats-worker.js` — pure functions, no DOM access
+- `script.js` adds `computeStatsAsync()` wrapper that:
+  - If history ≤ 500 → run sync (current behavior, fast already)
+  - If > 500 → post message to worker, await reply, then render
+- Cache is still invalidated on history mutation
+- Worker uses same algorithms (copy-pasted, must stay in sync)
 
-### 🎯 Practice Mode (Luyện tập)
-- New button on each quiz card: "📖 Luyện tập"
-- **No timer** — relaxed learning
-- **Immediate feedback** — when user picks an answer:
-  - Correct → highlight green + show ✅
-  - Wrong → highlight red + show correct answer in green + explanation if any
-- **No history saved** (not a real test attempt)
-- **Navigation** — Prev/Next buttons + question jump grid
-- **Progress shown** — "3/20 đúng so far"
-- **Restart button** — reset and re-practice with new shuffle
+### 3. 📝 JSDoc types for submitQuiz helpers
+Add JSDoc `@param` / `@returns` annotations to:
+- `_collectQuizAnswers(questions, answers)`
+- `_calculateQuizScore(correct, total)`
+- `_buildResultHtml(scoreInfo, correct, total, timeStr, reviewVisible)`
+- `_saveQuizHistory(score, correct, total)`
+- `computeStatsOverview()`
+- `computePerQuizStats()`
 
-### 🃏 Flashcard Mode
-- New button on each quiz card: "🃏 Flashcard"
-- **Front of card** — Question text only (large, centered)
-- **Back of card** — All options + the correct answer highlighted
-- **Click/tap card** → flip animation (CSS 3D transform)
-- **Swipe / arrow keys / buttons** → next or previous card
-- **Mark known/unknown** — 👍 "Đã thuộc" / 👎 "Cần ôn lại" buttons
-- **Cycle through unknowns** — option to filter only "unknowns" on next round
-- **Progress bar** — X/total seen, Y marked known
-- **Auto-flip option** — flip back after N seconds (off by default)
+This gives editors (VS Code) type-checking + auto-complete without TS toolchain.
 
-### 🌙 Improved Dark Mode
-- **System preference detection** — `prefers-color-scheme: dark`
-- **3 modes**: Light / Dark / Auto (system)
-- **Better contrast ratios** — WCAG AA compliant
-- **Smoother transitions** — `transition: background-color 0.3s, color 0.3s` everywhere
-- **OLED-friendly option** — true black (`#000`) for OLED screens (toggle)
-- **Fix any low-contrast text** in current dark theme
+### 4. 🧪 Unit tests (Vitest)
+These functions are pure-ish — perfect for unit tests:
+- `_collectQuizAnswers` — counts correct answers
+- `_calculateQuizScore` — grade thresholds (4 buckets)
+- `computeStatsOverview` — average / max / pass rate / streak
+- `computePerQuizStats` — aggregation by quizId
 
-### ⚡ Performance & Refactor
-- **Event delegation** — Replace inline `onclick` on rendered items with delegated listeners where possible
-- **Debounce search inputs** — `historySearch`, `searchQuiz` (300ms)
-- **DocumentFragment** instead of `innerHTML +=` in loops
-- **Memoize computed stats** — recompute only when history changes
-- **Lazy-load Chart.js** — only when stats page is opened
-- **Remove duplicate code** — share helpers between `startQuiz` lazy-render and review render
-- **Split very long functions** — `submitQuiz` (185 lines) → break into helpers
-- **Use `passive: true`** on scroll/touch listeners
+Because the project is a plain `<script>` (no modules), we'll:
+- Add `package.json` test config + dev-dep on `vitest`
+- Create `tests/` directory with files that import pure helpers via a small `lib/pure.js` (extracted from script.js — or a thin `module.exports`/`export` shim using a Node loader trick).
+- **Pragmatic path chosen:** create `lib/pure.js` (ESM) containing the pure helpers ONCE, then `script.js` defines wrappers that delegate (so the page still works as a script tag).
+  - However that's invasive. **Better path:** copy the pure functions into `tests/_helpers.js` (re-implement / mirror) so we test the LOGIC. Drift risk = OK for now.
+  - Even simpler: load `script.js` partially with a small extraction script that strips `_collectQuizAnswers` & `_calculateQuizScore` into a CommonJS module on the fly inside the test setup.
+- **Final choice:** create `lib/pure.cjs` — a CommonJS file with the pure helpers, and have `script.js` re-define them (so the browser path is untouched). Drift mitigated by also adding `node --check` and a comment header pointing to the canonical file.
 
-## Tech Stack
-- Vanilla JS (no framework added)
-- CSS variables for theming
-- CSS 3D transforms for flashcard flip
-- Service Worker bump → `quizmaster-v1.6.0-practice-flashcard`
-
-## Files to Modify
-- `index.html` — New sections (`practice`, `flashcard`), theme toggle UI, bump `?v=1.6.0`
-- `script.js` — New functions: `startPractice()`, `startFlashcard()`, `initTheme()`, refactors
-- `style.css` — Practice/flashcard styles, improved dark theme, transitions
-- `sw.js` — Bump CACHE_VERSION
-- `task.md` — New task checklist
+## Files to Modify / Add
+- `sw.js` — SWR rule for `questions-data.js`, bump CACHE_VERSION
+- `script.js` — JSDoc, Web Worker integration, computeStatsAsync
+- `stats-worker.js` — NEW (Web Worker)
+- `lib/pure.cjs` — NEW (pure helpers for Node tests)
+- `tests/pure.test.cjs` — NEW (unit tests)
+- `package.json` — add `vitest` (or `node --test`) + `test` script
+- `index.html` — bump versions to `?v=1.7.0`
+- `task.md` — checklist
 
 ## Design Decisions
-- Practice mode does **NOT** save to history (it's learning, not testing)
-- Flashcard uses **same quiz data** (no new data structure needed); "known" state stored in `sessionStorage` only (not persisted long-term)
-- Theme stored in `localStorage` as `theme` = `'light' | 'dark' | 'auto'`
-- All new UI mobile-first; flashcard sized to fit phone screen with comfortable swipe area
-- Use CSS `prefers-reduced-motion` to disable flip animation for accessibility
+- Use Node's **built-in `node:test`** runner — zero deps, ships with Node 20+. Avoids polluting `package.json` with 100+ MB of vitest. We have Node 24, so `node --test` works perfectly.
+- Worker created lazily (only when needed) → no startup cost for typical users.
+- Worker file `stats-worker.js` must be cached by SW (otherwise offline breaks).

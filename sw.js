@@ -1,5 +1,5 @@
 // Service Worker - QuizMaster Pro
-const CACHE_VERSION = 'quizmaster-v1.6.1-deferred-done';
+const CACHE_VERSION = 'quizmaster-v1.7.0-swr-worker';
 const CACHE_NAME = CACHE_VERSION;
 
 // Files cần cache để chạy offline
@@ -9,8 +9,15 @@ const STATIC_FILES = [
     './style.css',
     './script.js',
     './questions-data.js',
+    './stats-worker.js',
     './manifest.json'
 ];
+
+// v1.7.0 — Stale-While-Revalidate target: questions-data.js
+// Show cached version instantly + refresh in background → no forced reload
+function isQuestionsData(url) {
+    return /questions-data\.js(\?|$)/i.test(url);
+}
 
 // CDN libraries (cache khi load lần đầu)
 const CDN_FILES = [
@@ -68,6 +75,25 @@ self.addEventListener('fetch', event => {
     if (request.method !== 'GET') return;
 
     const url = request.url;
+
+    // 🆕 v1.7.0 — STALE-WHILE-REVALIDATE for questions-data.js (~250 KB)
+    // → Fast initial paint (cached) + fresh quizzes on next load (background refresh)
+    if (isQuestionsData(url)) {
+        event.respondWith(
+            caches.match(request).then(cached => {
+                const networkFetch = fetch(request).then(fresh => {
+                    if (fresh && fresh.status === 200) {
+                        const clone = fresh.clone();
+                        caches.open(CACHE_NAME).then(c => c.put(request, clone));
+                    }
+                    return fresh;
+                }).catch(() => null);
+                // Return cached immediately if available; otherwise wait for network
+                return cached || networkFetch;
+            })
+        );
+        return;
+    }
 
     // 🔥 NETWORK-FIRST cho app shell (html/js/css) → Firefox sẽ luôn nhận bản mới
     if (isAppShell(url)) {

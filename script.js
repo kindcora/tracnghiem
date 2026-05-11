@@ -108,6 +108,85 @@ function toggleBookmark(shuffledIndex, ev) {
 }
 window.toggleBookmark = toggleBookmark;
 
+// ============================================
+// 📝 NOTES PER QUESTION (v1.9.0)
+// Ghi chú riêng cho từng câu (theo quizId + origIndex). Khi gặp lại câu sau,
+// hiện lại nội dung ghi chú để học hỏi từ lần sai trước.
+// Key: 'notes_<quizId>'  →  { [origIndex: number]: string }
+// ============================================
+function _notesKey(quizId) { return 'notes_' + quizId; }
+function getNotes(quizId) {
+    if (quizId == null) return {};
+    const obj = safeGetItem(_notesKey(quizId), {});
+    return (obj && typeof obj === 'object') ? obj : {};
+}
+function getNote(quizId, origIndex) {
+    if (quizId == null || origIndex == null) return '';
+    const obj = getNotes(quizId);
+    return obj[origIndex] || '';
+}
+function setNote(quizId, origIndex, text) {
+    if (quizId == null || origIndex == null) return false;
+    const obj = getNotes(quizId);
+    const t = (text || '').trim();
+    if (t === '') delete obj[origIndex];
+    else obj[origIndex] = t.slice(0, 2000); // giới hạn 2000 ký tự cho an toàn
+    return safeSetItem(_notesKey(quizId), obj);
+}
+/** Đếm số câu có note cho 1 quiz */
+function countNotes(quizId) {
+    return Object.keys(getNotes(quizId)).length;
+}
+
+// Debounced save khi user gõ trong textarea
+const __noteSaveTimers = {};
+function onNoteInput(textarea, quizId, origIndex) {
+    try {
+        const key = quizId + '_' + origIndex;
+        clearTimeout(__noteSaveTimers[key]);
+        const indicator = textarea.parentElement && textarea.parentElement.querySelector('.note-save-status');
+        if (indicator) { indicator.textContent = '⏳ Đang gõ...'; indicator.className = 'note-save-status pending'; }
+        __noteSaveTimers[key] = setTimeout(() => {
+            const ok = setNote(quizId, origIndex, textarea.value);
+            if (indicator) {
+                indicator.textContent = ok ? '✅ Đã lưu' : '⚠️ Lỗi lưu';
+                indicator.className = 'note-save-status ' + (ok ? 'saved' : 'error');
+                setTimeout(() => { if (indicator) indicator.textContent = ''; }, 1500);
+            }
+        }, 800);
+    } catch (e) { console.warn('[onNoteInput]', e); }
+}
+window.onNoteInput = onNoteInput;
+
+function saveNoteNow(btn, quizId, origIndex) {
+    try {
+        const wrap = btn && btn.closest('.review-note');
+        if (!wrap) return;
+        const ta = wrap.querySelector('textarea');
+        if (!ta) return;
+        const ok = setNote(quizId, origIndex, ta.value);
+        const indicator = wrap.querySelector('.note-save-status');
+        if (indicator) {
+            indicator.textContent = ok ? '✅ Đã lưu' : '⚠️ Lỗi lưu';
+            indicator.className = 'note-save-status ' + (ok ? 'saved' : 'error');
+            setTimeout(() => { if (indicator) indicator.textContent = ''; }, 1500);
+        }
+        if (typeof showToast === 'function') showToast(ok ? '📝 Đã lưu ghi chú câu ' + (origIndex + 1) : 'Không lưu được ghi chú', ok ? 'success' : 'error', 1500);
+    } catch (e) { console.warn('[saveNoteNow]', e); }
+}
+window.saveNoteNow = saveNoteNow;
+
+// Toggle hiển thị note banner trên trang LÀM BÀI (do-question)
+function toggleQuestionNote(qIdx, ev) {
+    try {
+        if (ev) ev.stopPropagation();
+        const wrap = document.querySelector('.do-question-note[data-qidx="' + qIdx + '"]');
+        if (!wrap) return;
+        wrap.classList.toggle('open');
+    } catch (e) { console.warn('[toggleQuestionNote]', e); }
+}
+window.toggleQuestionNote = toggleQuestionNote;
+
 /**
  * v1.9.0 — Bắt đầu ôn lại CHỈ những câu đã đánh dấu của một quiz.
  * Tạo một quiz ảo trong bộ nhớ (không persist vào localStorage), gán id âm để phân biệt.
@@ -1339,9 +1418,17 @@ function renderQuestionHTML(q, i) {
     const __bm = __quizId != null && isBookmarked(__quizId, __origIdx);
     const __bmIcon = __bm ? '🚩' : '⚐';
     const __bmTitle = __bm ? 'Đã đánh dấu — bấm để bỏ' : 'Đánh dấu xem lại sau';
+    // v1.9.0 — Banner ghi chú (nếu câu này đã có note từ lần trước)
+    // Đối với quiz tạm 'làm lại câu đánh dấu', đọc note từ quiz GỐC bằng __bookmarkReviewOf
+    const __noteQuizId = (currentQuiz && currentQuiz.__bookmarkReviewOf != null) ? currentQuiz.__bookmarkReviewOf : __quizId;
+    const __noteText = (__noteQuizId != null) ? getNote(__noteQuizId, __origIdx) : '';
+    const __noteBanner = __noteText
+        ? `<div class="do-question-note" data-qidx="${i}"><div class="do-question-note-head" onclick="toggleQuestionNote(${i}, event)">📝 Bạn có ghi chú cho câu này — bấm để xem</div><div class="do-question-note-body">${escapeHtml(__noteText)}</div></div>`
+        : '';
     return `<div class="do-question">
         <button type="button" class="bookmark-btn${__bm ? ' on' : ''}" data-qidx="${i}" title="${__bmTitle}" aria-label="${__bmTitle}" onclick="toggleBookmark(${i}, event)">${__bmIcon}</button>
         <h4>Câu ${i+1}: ${escapeHtml(q.question)}</h4>
+        ${__noteBanner}
         ${opts}
     </div>`;
 }
@@ -1719,12 +1806,27 @@ function submitQuiz() {
                 </div>`;
             }
             // Câu SAI: hiển thị thu gọn, click để mở chi tiết bên dưới
+            // v1.9.0 — Thêm khung ghi chú trong .review-detail
+            const __nQuizId = (currentQuiz && currentQuiz.__bookmarkReviewOf != null) ? currentQuiz.__bookmarkReviewOf : (currentQuiz && currentQuiz.id);
+            const __nOrig = (q && q.__origIndex !== undefined) ? q.__origIndex : i;
+            const __nText = (__nQuizId != null) ? getNote(__nQuizId, __nOrig) : '';
+            const __noteHTML = (__nQuizId != null && __nOrig != null)
+                ? `<div class="review-note" onclick="event.stopPropagation()">
+                        <div class="review-note-head">📝 Ghi chú vì sao mình sai:</div>
+                        <textarea placeholder="Ví dụ: nhớ nhầm khái niệm…" maxlength="2000" oninput="onNoteInput(this, ${__nQuizId}, ${__nOrig})">${escapeHtml(__nText)}</textarea>
+                        <div class="review-note-foot">
+                            <button type="button" class="btn-info" style="width:auto;padding:6px 14px;font-size:13px" onclick="saveNoteNow(this, ${__nQuizId}, ${__nOrig})">💾 Lưu</button>
+                            <span class="note-save-status"></span>
+                        </div>
+                    </div>`
+                : '';
             return `<div class="review-question wrong collapsed" data-correct="0" onclick="toggleReviewDetail(this)" title="Bấm để xem chi tiết">
                 <strong>❌ Câu ${i + 1}: ${escapeHtml(q.question)}</strong>
                 <span class="review-toggle-hint">▼ Bấm để xem đáp án</span>
                 <div class="review-detail" style="display:none;margin-top:10px;padding-top:10px;border-top:1px dashed rgba(238,82,83,0.4)">
                     Đáp án của bạn: ${userAnsText}<br>
                     Đáp án đúng: <strong>${correctAnsText}</strong>
+                    ${__noteHTML}
                 </div>
             </div>`;
         } catch (e) {

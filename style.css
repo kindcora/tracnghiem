@@ -2388,3 +2388,110 @@ body, .container, .section, .quiz-item, .modal-content,
     .result-bookmark-row { font-size: 13px; padding: 8px 12px; }
 }
 
+/* ============================================ */
+/* 📝 NOTES PER QUESTION (v1.9.0) */
+/* ============================================ */
+
+/* Banner ghi chú trong trang LÀM BÀI (.do-question) */
+.do-question-note {
+    margin: 10px 0 14px;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid rgba(124,140,248,0.35);
+    background: linear-gradient(135deg, rgba(124,140,248,0.10), rgba(91,110,240,0.06));
+}
+.do-question-note-head {
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--primary, #5b6ef0);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    user-select: none;
+    transition: background 0.15s ease;
+}
+.do-question-note-head:hover { background: rgba(124,140,248,0.12); }
+.do-question-note-head::after {
+    content: '▼';
+    margin-left: auto;
+    font-size: 10px;
+    transition: transform 0.2s ease;
+}
+.do-question-note.open .do-question-note-head::after { transform: rotate(180deg); }
+.do-question-note-body {
+    padding: 0 12px;
+    max-height: 0;
+    overflow: hidden;
+    color: var(--text-main, #333);
+    font-size: 14px;
+    line-height: 1.6;
+    transition: max-height 0.25s ease, padding 0.25s ease;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+.do-question-note.open .do-question-note-body {
+    max-height: 400px;
+    padding: 8px 12px 12px;
+    border-top: 1px dashed rgba(124,140,248,0.4);
+}
+
+/* Khung ghi chú trong trang KẾT QUẢ (.review-detail .review-note) */
+.review-note {
+    margin-top: 12px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: rgba(124,140,248,0.06);
+    border: 1px solid rgba(124,140,248,0.25);
+}
+.review-note-head {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--primary, #5b6ef0);
+    margin-bottom: 6px;
+}
+.review-note textarea {
+    width: 100%;
+    min-height: 70px;
+    max-height: 220px;
+    padding: 8px 10px;
+    border: 1px solid var(--border, #d4d4d4);
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 14px;
+    line-height: 1.5;
+    resize: vertical;
+    background: var(--bg-card, #fff);
+    color: var(--text-main, #333);
+    box-sizing: border-box;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.review-note textarea:focus {
+    outline: none;
+    border-color: var(--primary, #5b6ef0);
+    box-shadow: 0 0 0 3px rgba(124,140,248,0.25);
+}
+.review-note-foot {
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.note-save-status {
+    font-size: 12px;
+    color: #888;
+    transition: color 0.15s ease;
+}
+.note-save-status.pending { color: #f5b301; }
+.note-save-status.saved { color: #2ecc71; }
+.note-save-status.error { color: #ee5253; }
+
+/* Mobile */
+@media (max-width: 768px) {
+    .do-question-note-head { font-size: 12px; padding: 7px 10px; }
+    .do-question-note-body { font-size: 13px; }
+    .review-note { padding: 8px 10px; }
+    .review-note textarea { font-size: 13px; min-height: 60px; }
+}
+

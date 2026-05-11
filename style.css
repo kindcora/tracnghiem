@@ -1340,23 +1340,6 @@ header { z-index: 100; }
 .qsp-stat-wrong { background: rgba(239,68,68,0.85); color: #fff; }
 .qsp-stat-total { background: rgba(255,255,255,0.2); color: #fff; }
 
-.qsp-live-toggle {
-    margin-bottom: 8px;
-    padding: 6px 8px;
-    background: var(--bg-input);
-    border: 1px dashed var(--border);
-    border-radius: 6px;
-    font-size: 11.5px;
-}
-.qsp-live-toggle label {
-    display: flex; align-items: center; gap: 6px; cursor: pointer;
-    color: var(--text-main);
-}
-.qsp-live-toggle input { cursor: pointer; }
-.question-status-panel.live-on .qsp-live-toggle {
-    border-color: #ef4444;
-    background: rgba(239,68,68,0.08);
-}
 .qsp-toggle {
     background: transparent;
     border: none;
@@ -1384,16 +1367,6 @@ header { z-index: 100; }
 .qsp-legend .dot.correct { background: #22c55e; }
 .qsp-legend .dot.wrong { background: #ef4444; }
 .qsp-legend .dot.empty { background: var(--bg-input); border: 1px solid var(--border); }
-
-/* Ẩn các mục "Đúng/Sai" trong legend khi Live tracking TẮT */
-.qsp-legend .legend-live-only { display: none; }
-.question-status-panel.live-on .qsp-legend .legend-live-only { display: flex; }
-
-/* Ẩn thanh tổng kết Đúng/Sai khi Live tracking TẮT */
-.qsp-stat-correct,
-.qsp-stat-wrong { display: none !important; }
-.question-status-panel.live-on .qsp-stat-correct,
-.question-status-panel.live-on .qsp-stat-wrong { display: inline-block !important; }
 
 .qsp-grid {
     display: grid;

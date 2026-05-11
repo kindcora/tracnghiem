@@ -140,22 +140,12 @@
             <div class="qsp-header" onclick="toggleQuestionStatusPanel()">
                 <span class="qsp-title">📋 Trạng thái</span>
                 <span class="qsp-summary">
-                    <span class="qsp-stat qsp-stat-correct" title="Số câu đúng">✓ <span id="qspCorrect">0</span></span>
-                    <span class="qsp-stat qsp-stat-wrong" title="Số câu sai">✗ <span id="qspWrong">0</span></span>
                     <span class="qsp-stat qsp-stat-total" title="Đã làm / Tổng"><span id="qspDone">0</span>/<span id="qspTotal">0</span></span>
                 </span>
                 <button class="qsp-toggle" id="qspToggleBtn" title="Thu gọn/Mở rộng" onclick="event.stopPropagation()">▼</button>
             </div>
             <div class="qsp-body" id="qspBody">
-                <div class="qsp-live-toggle">
-                    <label title="Bật để xem ngay câu đúng/sai khi đang làm bài">
-                        <input type="checkbox" id="qspLiveCheck" onchange="toggleLiveTracking()">
-                        <span>🔴 Live: Hiện đúng/sai ngay khi chọn</span>
-                    </label>
-                </div>
                 <div class="qsp-legend">
-                    <span class="legend-live-only"><i class="dot correct"></i> Đúng</span>
-                    <span class="legend-live-only"><i class="dot wrong"></i> Sai</span>
                     <span><i class="dot answered"></i> Đã làm</span>
                     <span><i class="dot empty"></i> Bỏ trống</span>
                 </div>

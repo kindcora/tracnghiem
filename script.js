@@ -273,8 +273,6 @@ function resetCurrentQuestion() {
 }
 
 // ============= TAB TRẠNG THÁI CÂU HỎI =============
-// Cờ bật/tắt chế độ live tracking (hiện đúng/sai ngay khi chọn)
-let liveTrackingEnabled = localStorage.getItem('liveTracking') === 'true';
 
 // Hiển thị/tạo panel trạng thái khi bắt đầu làm bài
 function initQuestionStatusPanel() {
@@ -285,14 +283,6 @@ function initQuestionStatusPanel() {
     const total = shuffledQuiz.questions.length;
     document.getElementById('qspTotal').textContent = total;
     document.getElementById('qspDone').textContent = 0;
-    const corrEl = document.getElementById('qspCorrect');
-    const wrongEl = document.getElementById('qspWrong');
-    if (corrEl) corrEl.textContent = 0;
-    if (wrongEl) wrongEl.textContent = 0;
-
-    // Khôi phục trạng thái checkbox live
-    const liveCheck = document.getElementById('qspLiveCheck');
-    if (liveCheck) liveCheck.checked = liveTrackingEnabled;
 
     // Render các ô trạng thái câu hỏi
     grid.innerHTML = '';
@@ -315,19 +305,6 @@ function initQuestionStatusPanel() {
     document.body.classList.add('qsp-active');
     const fab = document.getElementById('qspMobileToggle');
     if (fab) fab.classList.remove('active');
-    // Cập nhật class live trên panel
-    panel.classList.toggle('live-on', liveTrackingEnabled);
-}
-
-// Bật/tắt chế độ live tracking
-function toggleLiveTracking() {
-    const check = document.getElementById('qspLiveCheck');
-    liveTrackingEnabled = check ? check.checked : false;
-    localStorage.setItem('liveTracking', liveTrackingEnabled);
-    const panel = document.getElementById('questionStatusPanel');
-    if (panel) panel.classList.toggle('live-on', liveTrackingEnabled);
-    updateQuestionStatusPanel();
-    showToast(liveTrackingEnabled ? '🔴 Live tracking BẬT - sẽ hiện đúng/sai ngay' : '⚪ Live tracking TẮT', 'success', 1800);
 }
 
 // Cập nhật trạng thái từng câu (đã làm / bỏ trống / hiện tại / đúng / sai)
@@ -338,43 +315,28 @@ function updateQuestionStatusPanel() {
 
     const total = shuffledQuiz.questions.length;
     const cells = grid.querySelectorAll('.qsp-cell');
-    let done = 0, correct = 0, wrong = 0;
+    let done = 0;
 
     cells.forEach((cell, i) => {
         const ua = userAnswers[i];
         const answered = ua !== undefined;
-        const q = shuffledQuiz.questions[i];
-        const isCorrect = answered && q && ua === q.correct;
 
         // Reset các trạng thái phân loại
         cell.classList.remove('answered', 'correct', 'wrong', 'current');
 
         if (answered) {
             done++;
-            if (isCorrect) correct++;
-            else wrong++;
-
-            if (liveTrackingEnabled) {
-                cell.classList.add(isCorrect ? 'correct' : 'wrong');
-                cell.title = `Câu ${i + 1} - ${isCorrect ? '✓ Đúng' : '✗ Sai'} (Đã chọn ${String.fromCharCode(65 + ua)})`;
-            } else {
-                cell.classList.add('answered');
-                cell.title = `Câu ${i + 1} - Đã chọn ${String.fromCharCode(65 + ua)}`;
-            }
+            cell.classList.add('answered');
+            cell.title = `Câu ${i + 1} - Đã chọn ${String.fromCharCode(65 + ua)}`;
         } else {
             cell.title = `Câu ${i + 1} - Bỏ trống`;
         }
-        // Đã bỏ phần highlight "Hiện tại" theo yêu cầu
     });
 
     const doneEl = document.getElementById('qspDone');
     const totalEl = document.getElementById('qspTotal');
-    const corrEl = document.getElementById('qspCorrect');
-    const wrongEl = document.getElementById('qspWrong');
     if (doneEl) doneEl.textContent = done;
     if (totalEl) totalEl.textContent = total;
-    if (corrEl) corrEl.textContent = correct;
-    if (wrongEl) wrongEl.textContent = wrong;
 }
 
 // Thu gọn/mở rộng panel
@@ -767,6 +729,10 @@ function startQuiz(id) {
     
     document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
     document.getElementById('doQuiz').classList.add('active');
+    // Đóng menu mobile nếu đang mở
+    if (typeof closeMobileMenu === 'function') closeMobileMenu();
+    // Cuộn lên đầu trang để thấy tab làm bài
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     initQuestionStatusPanel();
     updateProgress();
     resetCurrentQuestion();

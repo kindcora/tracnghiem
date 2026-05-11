@@ -309,6 +309,12 @@ function initQuestionStatusPanel() {
     // Hiện panel
     panel.classList.add('visible');
     panel.classList.remove('collapsed');
+    // Trên mobile: mặc định ẨN panel (chỉ hiện khi user bấm nút FAB)
+    panel.classList.remove('mobile-shown');
+    // Đánh dấu body đang ở trạng thái làm bài (để hiện nút FAB mobile)
+    document.body.classList.add('qsp-active');
+    const fab = document.getElementById('qspMobileToggle');
+    if (fab) fab.classList.remove('active');
     // Cập nhật class live trên panel
     panel.classList.toggle('live-on', liveTrackingEnabled);
 }
@@ -380,7 +386,25 @@ function toggleQuestionStatusPanel() {
 // Ẩn panel khi nộp bài / rời trang làm bài
 function hideQuestionStatusPanel() {
     const panel = document.getElementById('questionStatusPanel');
-    if (panel) panel.classList.remove('visible');
+    if (panel) {
+        panel.classList.remove('visible');
+        panel.classList.remove('mobile-shown');
+    }
+    document.body.classList.remove('qsp-active');
+    const fab = document.getElementById('qspMobileToggle');
+    if (fab) fab.classList.remove('active');
+}
+
+// Ẩn/hiện panel trên mobile (gọi từ nút FAB)
+function toggleQspVisibility() {
+    const panel = document.getElementById('questionStatusPanel');
+    const fab = document.getElementById('qspMobileToggle');
+    if (!panel) return;
+    const willShow = !panel.classList.contains('mobile-shown');
+    panel.classList.toggle('mobile-shown', willShow);
+    if (fab) fab.classList.toggle('active', willShow);
+    // Khi mở lại, đảm bảo không bị ở trạng thái collapsed
+    if (willShow) panel.classList.remove('collapsed');
 }
 
 // Nhảy tới câu hỏi cụ thể (click vào ô trong panel)

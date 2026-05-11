@@ -1389,6 +1389,12 @@ header { z-index: 100; }
 .qsp-legend .legend-live-only { display: none; }
 .question-status-panel.live-on .qsp-legend .legend-live-only { display: flex; }
 
+/* Ẩn thanh tổng kết Đúng/Sai khi Live tracking TẮT */
+.qsp-stat-correct,
+.qsp-stat-wrong { display: none !important; }
+.question-status-panel.live-on .qsp-stat-correct,
+.question-status-panel.live-on .qsp-stat-wrong { display: inline-block !important; }
+
 .qsp-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
@@ -1433,6 +1439,41 @@ header { z-index: 100; }
     75% { transform: translateX(2px); }
 }
 @media (max-width: 600px) {
-    .question-status-panel { width: 240px; right: 10px; bottom: 10px; }
+    .question-status-panel { width: 240px; right: 10px; bottom: 70px; }
     .qsp-body { max-height: 40vh; }
+    /* Trên mobile: panel mặc định ẨN, chỉ hiện khi có cả class 'visible' và 'mobile-shown' */
+    .question-status-panel.visible { display: none; }
+    .question-status-panel.visible.mobile-shown { display: block; }
+}
+
+/* === Nút nổi ẩn/hiện tab trạng thái (chỉ mobile) === */
+.qsp-mobile-toggle {
+    display: none; /* Mặc định ẩn trên desktop */
+    position: fixed;
+    right: 10px;
+    bottom: 10px;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    border: none;
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    color: #fff;
+    font-size: 20px;
+    cursor: pointer;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.45);
+    z-index: 97;
+    transition: transform 0.2s ease, background 0.2s ease;
+    align-items: center;
+    justify-content: center;
+}
+.qsp-mobile-toggle:hover { transform: scale(1.08); }
+.qsp-mobile-toggle.active {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+}
+@media (max-width: 600px) {
+    /* Chỉ hiện nút khi panel đang ở chế độ "khả dụng" (đang làm bài) */
+    .question-status-panel.visible ~ .qsp-mobile-toggle,
+    body.qsp-active .qsp-mobile-toggle {
+        display: flex;
+    }
 }

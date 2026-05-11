@@ -1403,8 +1403,8 @@ function startPreloadedQuiz() {
         quizzes.push(pq);
         localStorage.setItem('quizzes', JSON.stringify(quizzes));
     }
-    // Mở modal tùy chỉnh trước khi làm bài (cho phép chỉnh thời gian, số câu, đảo thứ tự)
-    customizeQuiz(pq.id);
+    // Bắt đầu ôn tập ngay với cài đặt mặc định (không mở modal tùy chỉnh)
+    startQuiz(pq.id);
 }
 
 window.onload = () => { 

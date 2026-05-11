@@ -1078,41 +1078,147 @@ function updateProgress() {
 }
 
 function submitQuiz() {
-    clearInterval(timerInterval);
-    hideQuestionStatusPanel();
+    try {
+        clearInterval(timerInterval);
+        timerInterval = null;
+    } catch (e) {}
+    try { hideQuestionStatusPanel(); } catch (e) {}
+
+    if (!shuffledQuiz || !shuffledQuiz.questions || shuffledQuiz.questions.length === 0) {
+        showToast && showToast('Không có dữ liệu bài làm!', 'error');
+        return;
+    }
+
+    const questions = shuffledQuiz.questions;
+    const total = questions.length;
+
+    // 1) Tính điểm NHANH — không build HTML để tránh crash bộ nhớ trên WebView Zalo
     let correct = 0;
-    const total = shuffledQuiz.questions.length;
-    const review = shuffledQuiz.questions.map((q, i) => {
-        const ua = userAnswers[i];
-        const ok = ua === q.correct;
-        if (ok) correct++;
-        return `<div class="review-question ${ok?'correct':'wrong'}">
-            <strong>Câu ${i+1}: ${escapeHtml(q.question)}</strong><br>
-            Đáp án của bạn: ${ua!==undefined ? String.fromCharCode(65+ua)+'. '+escapeHtml(q.options[ua]) : '(không trả lời)'}<br>
-            Đáp án đúng: <strong>${String.fromCharCode(65+q.correct)}. ${escapeHtml(q.options[q.correct])}</strong>
-        </div>`;
-    }).join('');
-    
-    const score = ((correct/total)*10).toFixed(2);
-    
-    // Lưu lịch sử
-    history.push({
-        quizId: currentQuiz.id, quizTitle: currentQuiz.title,
-        score: parseFloat(score), correct, total,
-        date: new Date().toLocaleString('vi-VN'),
-        timestamp: Date.now()
-    });
-    localStorage.setItem('history', JSON.stringify(history));
-    
-    document.getElementById('resultContent').innerHTML = `
+    for (let i = 0; i < total; i++) {
+        if (userAnswers[i] === questions[i].correct) correct++;
+    }
+    const score = ((correct / total) * 10).toFixed(2);
+
+    // 2) Lưu lịch sử (try/catch phòng localStorage đầy)
+    try {
+        history.push({
+            quizId: currentQuiz ? currentQuiz.id : 0,
+            quizTitle: currentQuiz ? currentQuiz.title : '(Không tên)',
+            score: parseFloat(score), correct, total,
+            date: new Date().toLocaleString('vi-VN'),
+            timestamp: Date.now()
+        });
+        localStorage.setItem('history', JSON.stringify(history));
+    } catch (e) {
+        console.warn('Không lưu được lịch sử:', e);
+    }
+
+    // 3) Hiển thị KẾT QUẢ TRƯỚC (rất nhẹ) — đảm bảo user luôn thấy điểm dù review lỗi
+    const resultEl = document.getElementById('resultContent');
+    const emoji = score >= 8 ? '🏆 Xuất sắc!' : score >= 6.5 ? '👍 Khá' : score >= 5 ? '😊 Trung bình' : '💪 Cố gắng thêm!';
+    resultEl.innerHTML = `
         <div class="result-box">
             <h3>${score}/10</h3>
             <p>Đúng ${correct}/${total} câu</p>
-            <p>${score>=8?'🏆 Xuất sắc!':score>=6.5?'👍 Khá':score>=5?'😊 Trung bình':'💪 Cố gắng thêm!'}</p>
+            <p>${emoji}</p>
         </div>
-        <h3 style="margin:20px 0">📖 Chi tiết:</h3>${review}`;
+        <div style="margin:20px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <h3 style="margin:0">📖 Chi tiết:</h3>
+            <button id="toggleReviewBtn" class="btn-secondary" style="padding:6px 12px;font-size:14px">${total > 50 ? '👁️ Hiện chi tiết' : '🙈 Ẩn chi tiết'}</button>
+        </div>
+        <div id="reviewContainer"></div>
+    `;
+
     document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
     document.getElementById('result').classList.add('active');
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+
+    // 4) Lazy render review theo CHUNK — tránh crash WebView khi đề lớn
+    const reviewContainer = document.getElementById('reviewContainer');
+    const toggleBtn = document.getElementById('toggleReviewBtn');
+    let reviewRendered = false;
+    let reviewVisible = total <= 50; // Đề <=50 câu: tự hiện. Đề lớn: ẩn để tránh crash.
+
+    function buildItemHTML(q, i) {
+        try {
+            const ua = userAnswers[i];
+            const ok = ua === q.correct;
+            const userAnsText = (ua !== undefined && q.options[ua] !== undefined)
+                ? String.fromCharCode(65 + ua) + '. ' + escapeHtml(q.options[ua])
+                : '(không trả lời)';
+            const correctAnsText = (q.options[q.correct] !== undefined)
+                ? String.fromCharCode(65 + q.correct) + '. ' + escapeHtml(q.options[q.correct])
+                : '(N/A)';
+            return `<div class="review-question ${ok ? 'correct' : 'wrong'}">
+                <strong>Câu ${i + 1}: ${escapeHtml(q.question)}</strong><br>
+                Đáp án của bạn: ${userAnsText}<br>
+                Đáp án đúng: <strong>${correctAnsText}</strong>
+            </div>`;
+        } catch (e) {
+            return `<div class="review-question wrong"><strong>Câu ${i + 1}: (lỗi hiển thị)</strong></div>`;
+        }
+    }
+
+    function renderReviewLazy() {
+        if (reviewRendered) return;
+        reviewRendered = true;
+        reviewContainer.innerHTML = '';
+        const FIRST = Math.min(20, total);
+        let firstHTML = '';
+        for (let i = 0; i < FIRST; i++) firstHTML += buildItemHTML(questions[i], i);
+        reviewContainer.innerHTML = firstHTML;
+
+        if (total <= FIRST) return;
+
+        const hint = document.createElement('div');
+        hint.style.cssText = 'text-align:center;padding:12px;color:#888;font-style:italic;font-size:14px';
+        hint.textContent = `⏳ Đang tải chi tiết... ${FIRST}/${total}`;
+        reviewContainer.appendChild(hint);
+
+        let idx = FIRST;
+        const CHUNK = 25;
+        const schedule = window.requestIdleCallback
+            ? (cb) => window.requestIdleCallback(cb, { timeout: 300 })
+            : (cb) => setTimeout(cb, 16);
+
+        function next() {
+            try {
+                if (idx >= total) { hint.remove(); return; }
+                const end = Math.min(idx + CHUNK, total);
+                let html = '';
+                for (let i = idx; i < end; i++) html += buildItemHTML(questions[i], i);
+                hint.insertAdjacentHTML('beforebegin', html);
+                idx = end;
+                hint.textContent = `⏳ Đang tải chi tiết... ${idx}/${total}`;
+                if (idx >= total) hint.remove();
+                else schedule(next);
+            } catch (e) {
+                console.error('Render review error:', e);
+                hint.textContent = '⚠️ Lỗi tải chi tiết';
+            }
+        }
+        schedule(next);
+    }
+
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', () => {
+            if (!reviewVisible) {
+                reviewVisible = true;
+                toggleBtn.textContent = '🙈 Ẩn chi tiết';
+                renderReviewLazy();
+            } else {
+                reviewVisible = false;
+                toggleBtn.textContent = '👁️ Hiện chi tiết';
+                reviewContainer.innerHTML = '';
+                reviewRendered = false;
+            }
+        });
+    }
+
+    if (reviewVisible) {
+        // Render sau 1 tick để UI điểm hiện trước
+        setTimeout(renderReviewLazy, 30);
+    }
 }
 
 // ============= XUẤT CSV =============

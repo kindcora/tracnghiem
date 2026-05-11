@@ -1,5 +1,5 @@
 // Service Worker - QuizMaster Pro
-const CACHE_VERSION = 'quizmaster-v1.5.2-fix-tdz-reviewVisible';
+const CACHE_VERSION = 'quizmaster-v1.6.0-practice-flashcard';
 const CACHE_NAME = CACHE_VERSION;
 
 // Files cần cache để chạy offline

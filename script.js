@@ -506,18 +506,48 @@ function jumpToQuestion(index) {
 
     updateQuestionStatusPanel();
 }
-// ============= THEME TOGGLE (CHẾ ĐỘ SÁNG/TỐI) =============
-function toggleTheme() {
-    document.body.classList.toggle('light-mode');
-    const isLight = document.body.classList.contains('light-mode');
-    document.getElementById('themeToggle').textContent = isLight ? '☀️' : '🌙';
-    document.getElementById('themeToggle').title = isLight ? 'Chuyển sang chế độ tối' : 'Chuyển sang chế độ sáng';
-    safeSetItem('theme', isLight ? 'light' : 'dark');
-    
-    // Cập nhật biểu đồ nếu đang ở trang thống kê
-    if (document.getElementById('stats').classList.contains('active')) {
+// ============= THEME TOGGLE (3 MODES: LIGHT / DARK / AUTO) =============
+// v1.6.0 — Cycle through 3 modes & respect system preference for AUTO
+const THEME_ORDER = ['dark', 'light', 'auto'];
+const THEME_ICON = { dark: '🌙', light: '☀️', auto: '🌓' };
+const THEME_LABEL = {
+    dark: 'Chế độ tối (bấm: sáng)',
+    light: 'Chế độ sáng (bấm: tự động)',
+    auto: 'Tự động theo hệ thống (bấm: tối)'
+};
+
+function getSystemPrefersDark() {
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+
+function applyTheme(mode) {
+    let effective = mode;
+    if (mode === 'auto') effective = getSystemPrefersDark() ? 'dark' : 'light';
+    document.body.classList.toggle('light-mode', effective === 'light');
+    document.body.setAttribute('data-theme-mode', mode);
+    const btn = document.getElementById('themeToggle');
+    if (btn) {
+        btn.textContent = THEME_ICON[mode] || '🌙';
+        btn.title = THEME_LABEL[mode] || '';
+    }
+}
+
+function setTheme(mode) {
+    if (!THEME_ORDER.includes(mode)) mode = 'dark';
+    safeSetItem('theme', mode);
+    applyTheme(mode);
+    // Refresh charts if stats page is open (colors depend on theme)
+    if (document.getElementById('stats')?.classList.contains('active')) {
         renderStats();
     }
+}
+
+function toggleTheme() {
+    const current = localStorage.getItem('theme') || 'dark';
+    const idx = THEME_ORDER.indexOf(current);
+    const next = THEME_ORDER[(idx + 1) % THEME_ORDER.length];
+    setTheme(next);
+    showToast(`Chế độ: ${next === 'dark' ? '🌙 Tối' : next === 'light' ? '☀️ Sáng' : '🌓 Tự động'}`, 'success', 1500);
 }
 // ============= HIỆU ỨNG PARTICLE BACKGROUND =============
 function createParticles() {
@@ -579,15 +609,22 @@ function checkTimerWarning() {
     }
 }
 
-// Load theme đã lưu (mặc định DARK)
+// Load theme đã lưu (mặc định DARK). v1.6.0: hỗ trợ 3 mode + auto theo hệ thống
 function loadTheme() {
-    const savedTheme = localStorage.getItem('theme');
-    if (savedTheme === 'light') {
-        document.body.classList.add('light-mode');
-        const btn = document.getElementById('themeToggle');
-        if (btn) { btn.textContent = '☀️'; btn.title = 'Chuyển sang chế độ tối'; }
+    let mode = localStorage.getItem('theme');
+    if (!THEME_ORDER.includes(mode)) mode = 'dark'; // mặc định
+    applyTheme(mode);
+
+    // Lắng nghe thay đổi system preference khi đang ở mode 'auto'
+    if (window.matchMedia) {
+        const mq = window.matchMedia('(prefers-color-scheme: dark)');
+        const handler = () => {
+            const current = localStorage.getItem('theme') || 'dark';
+            if (current === 'auto') applyTheme('auto');
+        };
+        if (mq.addEventListener) mq.addEventListener('change', handler);
+        else if (mq.addListener) mq.addListener(handler); // Safari cũ
     }
-    // Mặc định là DARK (không cần làm gì)
 }
 // ============= MOBILE MENU TOGGLE =============
 function toggleMobileMenu() {
@@ -900,6 +937,8 @@ function renderQuizList() {
             </div>
             <div class="btn-group">
                 <button class="btn-primary" onclick="startQuiz(${q.id})">▶️ Làm bài</button>
+                <button class="btn-success" onclick="startPractice(${q.id})" title="Luyện tập với phản hồi tức thì">📖 Luyện tập</button>
+                <button class="btn-warning" onclick="startFlashcard(${q.id})" title="Học bằng flashcard">🃏 Flashcard</button>
                 <button class="btn-secondary" onclick="customizeQuiz(${q.id})">⚙️ Tùy chỉnh</button>
                 <button class="btn-info" onclick="exportCSV(${q.id})">📄 CSV</button>
                 <button class="btn-info" onclick="exportWord(${q.id})">📝 Word</button>
@@ -2046,3 +2085,316 @@ function toggleReviewDetail(el) {
 }
 // Phơi ra global để onclick inline gọi được
 window.toggleReviewDetail = toggleReviewDetail;
+
+// ============================================================
+// v1.6.0 — PRACTICE MODE (Luyện tập với phản hồi tức thì)
+// ============================================================
+let practiceState = null;
+
+function startPractice(id) {
+    try {
+        const quiz = quizzes.find(q => q.id === id);
+        if (!quiz) { showToast('Không tìm thấy đề thi!', 'error'); return; }
+        // Use shuffled options always, but no time limit, no save to history
+        const prepared = prepareQuizForDoing({ ...quiz, shuffleQ: true, shuffleO: true });
+        practiceState = {
+            quizId: id,
+            title: quiz.title,
+            questions: prepared.questions,
+            current: 0,
+            answers: {}, // { qIndex: selectedOptionIndex }
+            correctCount: 0,
+            wrongCount: 0
+        };
+        document.getElementById('practiceTitle').textContent = '📖 Luyện tập: ' + quiz.title;
+        document.getElementById('practiceTotal').textContent = prepared.questions.length;
+        document.getElementById('practiceCorrect').textContent = '0';
+        document.getElementById('practiceWrong').textContent = '0';
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+        document.getElementById('practice').classList.add('active');
+        if (typeof closeMobileMenu === 'function') closeMobileMenu();
+        window.scrollTo({ top: 0, behavior: 'instant' });
+        renderPracticeQuestion();
+    } catch (e) {
+        console.error('[startPractice] error:', e);
+        showToast('Lỗi khi bắt đầu luyện tập: ' + e.message, 'error');
+    }
+}
+
+function renderPracticeQuestion() {
+    if (!practiceState) return;
+    const { questions, current, answers } = practiceState;
+    const q = questions[current];
+    if (!q) return;
+    const answered = answers[current];
+    const answeredIdx = (typeof answered === 'number') ? answered : -1;
+    const correctIdx = q.correct;
+
+    let html = `<div class="practice-question">
+        <div class="practice-q-number">Câu ${current + 1} / ${questions.length}</div>
+        <div class="practice-q-text">${escapeHtml(q.question)}</div>
+        <div class="practice-options">`;
+    q.options.forEach((opt, i) => {
+        let cls = 'practice-option';
+        if (answeredIdx !== -1) {
+            if (i === correctIdx) cls += ' correct';
+            else if (i === answeredIdx) cls += ' wrong';
+            else cls += ' disabled';
+        }
+        const letter = String.fromCharCode(65 + i);
+        const onclickAttr = answeredIdx === -1 ? `onclick="practiceAnswer(${i})"` : '';
+        html += `<div class="${cls}" ${onclickAttr}>
+            <span class="practice-letter">${letter}.</span>
+            <span class="practice-opt-text">${escapeHtml(opt)}</span>
+        </div>`;
+    });
+    html += '</div>';
+    if (answeredIdx !== -1) {
+        const isRight = answeredIdx === correctIdx;
+        html += `<div class="practice-feedback ${isRight ? 'right' : 'wrong'}">
+            ${isRight
+                ? '✅ <b>Chính xác!</b> Tốt lắm 🎉'
+                : `❌ <b>Sai rồi.</b> Đáp án đúng là <b>${String.fromCharCode(65 + correctIdx)}. ${escapeHtml(q.options[correctIdx])}</b>`}
+        </div>`;
+    }
+    html += '</div>';
+    document.getElementById('practiceContent').innerHTML = html;
+    document.getElementById('practiceCurrent').textContent = current + 1;
+    const progressPct = ((current + 1) / questions.length) * 100;
+    document.getElementById('practiceProgressFill').style.width = progressPct + '%';
+    document.getElementById('practicePrevBtn').disabled = current === 0;
+    document.getElementById('practiceNextBtn').disabled = current === questions.length - 1;
+}
+
+function practiceAnswer(optIdx) {
+    if (!practiceState) return;
+    const { questions, current, answers } = practiceState;
+    if (typeof answers[current] === 'number') return; // already answered
+    answers[current] = optIdx;
+    if (optIdx === questions[current].correct) practiceState.correctCount++;
+    else practiceState.wrongCount++;
+    document.getElementById('practiceCorrect').textContent = practiceState.correctCount;
+    document.getElementById('practiceWrong').textContent = practiceState.wrongCount;
+    renderPracticeQuestion();
+}
+
+function practiceNext() {
+    if (!practiceState) return;
+    if (practiceState.current < practiceState.questions.length - 1) {
+        practiceState.current++;
+        renderPracticeQuestion();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+        showToast('🎉 Đã hết câu! Tổng: ' + practiceState.correctCount + ' đúng / ' + practiceState.wrongCount + ' sai', 'success', 4000);
+    }
+}
+
+function practicePrev() {
+    if (!practiceState) return;
+    if (practiceState.current > 0) {
+        practiceState.current--;
+        renderPracticeQuestion();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+}
+
+function practiceRestart() {
+    if (!practiceState) return;
+    if (!confirm('Bắt đầu lại từ đầu? Tiến độ hiện tại sẽ bị xoá.')) return;
+    startPractice(practiceState.quizId);
+}
+
+function practiceExit() {
+    if (practiceState && Object.keys(practiceState.answers).length > 0) {
+        if (!confirm('Thoát khỏi luyện tập?')) return;
+    }
+    practiceState = null;
+    showSection('list');
+}
+
+// ============================================================
+// v1.6.0 — FLASHCARD MODE
+// ============================================================
+let flashcardState = null;
+
+function startFlashcard(id) {
+    try {
+        const quiz = quizzes.find(q => q.id === id);
+        if (!quiz) { showToast('Không tìm thấy đề thi!', 'error'); return; }
+        // Clone & optionally shuffle
+        const shuffleChk = document.getElementById('fcShuffleChk');
+        const doShuffle = shuffleChk ? shuffleChk.checked : false;
+        let cards = quiz.questions.slice();
+        if (doShuffle) cards = shuffleArray(cards);
+        flashcardState = {
+            quizId: id,
+            title: quiz.title,
+            allCards: cards,
+            cards: cards.slice(), // filtered view
+            current: 0,
+            flipped: false,
+            known: new Set(),    // indices in allCards
+            unknown: new Set(),  // indices in allCards
+            onlyUnknown: false
+        };
+        document.getElementById('flashcardTitle').textContent = '🃏 Flashcard: ' + quiz.title;
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+        document.getElementById('flashcard').classList.add('active');
+        if (typeof closeMobileMenu === 'function') closeMobileMenu();
+        window.scrollTo({ top: 0, behavior: 'instant' });
+        renderFlashcard();
+    } catch (e) {
+        console.error('[startFlashcard] error:', e);
+        showToast('Lỗi khi bắt đầu flashcard: ' + e.message, 'error');
+    }
+}
+
+function renderFlashcard() {
+    if (!flashcardState) return;
+    const { cards, current, flipped, known, unknown } = flashcardState;
+    if (cards.length === 0) {
+        document.getElementById('fcQuestion').textContent = '🎉 Không còn thẻ nào! Bạn đã thuộc hết.';
+        document.getElementById('fcOptions').innerHTML = '';
+        document.getElementById('fcCurrent').textContent = '0';
+        document.getElementById('fcTotal').textContent = '0';
+        document.getElementById('fcProgressFill').style.width = '100%';
+        return;
+    }
+    const card = cards[current];
+    document.getElementById('fcQuestion').textContent = card.question;
+    const correctIdx = card.correct;
+    let optsHtml = '';
+    card.options.forEach((opt, i) => {
+        const cls = i === correctIdx ? 'fc-opt fc-opt-correct' : 'fc-opt';
+        const letter = String.fromCharCode(65 + i);
+        optsHtml += `<div class="${cls}"><b>${letter}.</b> ${escapeHtml(opt)}${i === correctIdx ? ' ✅' : ''}</div>`;
+    });
+    document.getElementById('fcOptions').innerHTML = optsHtml;
+    document.getElementById('fcCurrent').textContent = current + 1;
+    document.getElementById('fcTotal').textContent = cards.length;
+    document.getElementById('fcKnown').textContent = known.size;
+    document.getElementById('fcUnknown').textContent = unknown.size;
+    document.getElementById('fcProgressFill').style.width = (((current + 1) / cards.length) * 100) + '%';
+    const inner = document.getElementById('flashcardInner');
+    inner.classList.toggle('flipped', !!flipped);
+}
+
+function flashcardFlip() {
+    if (!flashcardState) return;
+    flashcardState.flipped = !flashcardState.flipped;
+    renderFlashcard();
+}
+
+function flashcardNext() {
+    if (!flashcardState) return;
+    if (flashcardState.cards.length === 0) return;
+    flashcardState.flipped = false;
+    if (flashcardState.current < flashcardState.cards.length - 1) {
+        flashcardState.current++;
+    } else {
+        flashcardState.current = 0; // loop
+        showToast('🔁 Quay lại đầu bộ thẻ', 'success', 1500);
+    }
+    renderFlashcard();
+}
+
+function flashcardPrev() {
+    if (!flashcardState) return;
+    if (flashcardState.cards.length === 0) return;
+    flashcardState.flipped = false;
+    flashcardState.current = (flashcardState.current - 1 + flashcardState.cards.length) % flashcardState.cards.length;
+    renderFlashcard();
+}
+
+function flashcardMark(isKnown) {
+    if (!flashcardState || flashcardState.cards.length === 0) return;
+    const card = flashcardState.cards[flashcardState.current];
+    // Find index in allCards by reference
+    const realIdx = flashcardState.allCards.indexOf(card);
+    if (isKnown) {
+        flashcardState.known.add(realIdx);
+        flashcardState.unknown.delete(realIdx);
+    } else {
+        flashcardState.unknown.add(realIdx);
+        flashcardState.known.delete(realIdx);
+    }
+    // Auto next
+    flashcardNext();
+}
+
+function flashcardFilterToggle() {
+    if (!flashcardState) return;
+    const chk = document.getElementById('fcOnlyUnknownChk');
+    flashcardState.onlyUnknown = !!(chk && chk.checked);
+    if (flashcardState.onlyUnknown) {
+        flashcardState.cards = flashcardState.allCards.filter((c, i) => !flashcardState.known.has(i));
+    } else {
+        flashcardState.cards = flashcardState.allCards.slice();
+    }
+    flashcardState.current = 0;
+    flashcardState.flipped = false;
+    renderFlashcard();
+}
+
+function flashcardRestart() {
+    if (!flashcardState) return;
+    const id = flashcardState.quizId;
+    startFlashcard(id);
+}
+
+function flashcardExit() {
+    if (!confirm('Thoát khỏi flashcard?')) return;
+    flashcardState = null;
+    showSection('list');
+}
+
+// Keyboard shortcuts for flashcard
+document.addEventListener('keydown', (e) => {
+    const fcActive = document.getElementById('flashcard')?.classList.contains('active');
+    if (!fcActive || !flashcardState) return;
+    // ignore when typing in inputs
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    switch (e.key) {
+        case ' ': case 'Enter': e.preventDefault(); flashcardFlip(); break;
+        case 'ArrowRight': case 'ArrowDown': e.preventDefault(); flashcardNext(); break;
+        case 'ArrowLeft': case 'ArrowUp': e.preventDefault(); flashcardPrev(); break;
+        case '1': case 'k': case 'K': e.preventDefault(); flashcardMark(true); break;
+        case '0': case 'j': case 'J': e.preventDefault(); flashcardMark(false); break;
+    }
+});
+
+// Touch swipe gestures for flashcard
+(function setupFlashcardSwipe(){
+    const wrapper = document.getElementById('flashcardWrapper');
+    if (!wrapper) return;
+    let sx = 0, sy = 0, ex = 0, ey = 0;
+    wrapper.addEventListener('touchstart', (e) => {
+        const t = e.changedTouches[0];
+        sx = t.screenX; sy = t.screenY;
+    }, { passive: true });
+    wrapper.addEventListener('touchend', (e) => {
+        const t = e.changedTouches[0];
+        ex = t.screenX; ey = t.screenY;
+        const dx = ex - sx, dy = ey - sy;
+        if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
+            if (dx < 0) flashcardNext();
+            else flashcardPrev();
+        }
+    }, { passive: true });
+})();
+
+// Expose to global scope for inline onclick handlers
+window.startPractice = startPractice;
+window.practiceAnswer = practiceAnswer;
+window.practiceNext = practiceNext;
+window.practicePrev = practicePrev;
+window.practiceRestart = practiceRestart;
+window.practiceExit = practiceExit;
+window.startFlashcard = startFlashcard;
+window.flashcardFlip = flashcardFlip;
+window.flashcardNext = flashcardNext;
+window.flashcardPrev = flashcardPrev;
+window.flashcardMark = flashcardMark;
+window.flashcardRestart = flashcardRestart;
+window.flashcardExit = flashcardExit;
+window.flashcardFilterToggle = flashcardFilterToggle;

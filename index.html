@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/192/3976/3976625.png">
 <title>QuizMaster Pro - Tạo Đề Trắc Nghiệm</title>
-<link rel="stylesheet" href="style.css?v=1.5.0">
+<link rel="stylesheet" href="style.css?v=1.6.0">
 <!-- Thư viện đọc file Word (.docx) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 <!-- Thư viện tạo file Word -->
@@ -158,6 +158,73 @@
     </div>
 </section>
 
+<!-- Luyện tập (Practice Mode) -->
+<section id="practice" class="section">
+    <div class="container">
+        <div class="quiz-header">
+            <h2 id="practiceTitle">📖 Luyện tập</h2>
+            <div class="practice-stats">
+                <span class="practice-stat practice-stat-correct">✅ <span id="practiceCorrect">0</span></span>
+                <span class="practice-stat practice-stat-wrong">❌ <span id="practiceWrong">0</span></span>
+                <span class="practice-stat practice-stat-total"><span id="practiceCurrent">0</span>/<span id="practiceTotal">0</span></span>
+            </div>
+        </div>
+        <div class="progress-bar"><div id="practiceProgressFill" class="progress-fill"></div></div>
+        <div id="practiceContent" class="practice-content"></div>
+        <div class="practice-nav">
+            <button class="btn-secondary" id="practicePrevBtn" onclick="practicePrev()">⬅️ Câu trước</button>
+            <button class="btn-secondary" id="practiceNextBtn" onclick="practiceNext()">Câu sau ➡️</button>
+            <button class="btn-info" onclick="practiceRestart()">🔄 Làm lại</button>
+            <button class="btn-danger" onclick="practiceExit()">🚪 Thoát</button>
+        </div>
+    </div>
+</section>
+
+<!-- Flashcard Mode -->
+<section id="flashcard" class="section">
+    <div class="container">
+        <div class="quiz-header">
+            <h2 id="flashcardTitle">🃏 Flashcard</h2>
+            <div class="flashcard-stats">
+                <span class="flashcard-stat flashcard-stat-known">👍 <span id="fcKnown">0</span></span>
+                <span class="flashcard-stat flashcard-stat-unknown">👎 <span id="fcUnknown">0</span></span>
+                <span class="flashcard-stat"><span id="fcCurrent">0</span>/<span id="fcTotal">0</span></span>
+            </div>
+        </div>
+        <div class="progress-bar"><div id="fcProgressFill" class="progress-fill"></div></div>
+
+        <div class="flashcard-wrapper" id="flashcardWrapper">
+            <div class="flashcard" id="flashcardEl" onclick="flashcardFlip()" tabindex="0" role="button" aria-label="Bấm để lật thẻ">
+                <div class="flashcard-inner" id="flashcardInner">
+                    <div class="flashcard-face flashcard-front">
+                        <div class="flashcard-label">❓ Câu hỏi</div>
+                        <div class="flashcard-question" id="fcQuestion">—</div>
+                        <div class="flashcard-hint">👆 Bấm để xem đáp án</div>
+                    </div>
+                    <div class="flashcard-face flashcard-back">
+                        <div class="flashcard-label">💡 Đáp án</div>
+                        <div class="flashcard-options" id="fcOptions"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="flashcard-actions">
+            <button class="btn-danger" onclick="flashcardMark(false)" title="Cần ôn lại">👎 Cần ôn</button>
+            <button class="btn-secondary" onclick="flashcardPrev()">⬅️ Trước</button>
+            <button class="btn-info" onclick="flashcardFlip()">🔄 Lật thẻ</button>
+            <button class="btn-secondary" onclick="flashcardNext()">Sau ➡️</button>
+            <button class="btn-primary" onclick="flashcardMark(true)" title="Đã thuộc">👍 Đã thuộc</button>
+        </div>
+        <div class="flashcard-controls">
+            <label class="fc-checkbox"><input type="checkbox" id="fcShuffleChk" onchange="flashcardRestart()"> 🎲 Trộn thẻ</label>
+            <label class="fc-checkbox"><input type="checkbox" id="fcOnlyUnknownChk" onchange="flashcardFilterToggle()"> 🎯 Chỉ thẻ chưa thuộc</label>
+            <button class="btn-info" onclick="flashcardRestart()">🔄 Bắt đầu lại</button>
+            <button class="btn-danger" onclick="flashcardExit()">🚪 Thoát</button>
+        </div>
+    </div>
+</section>
+
 <!-- Kết quả -->
 <section id="result" class="section">
     <div class="container">
@@ -264,7 +331,7 @@
 <!-- Nút phím tắt floating -->
 <button class="shortcut-btn" onclick="document.getElementById('shortcutModal').style.display='block'" title="Phím tắt (?)">⌨️</button>
 
-<script src="questions-data.js?v=1.5.0"></script>
-<script src="script.js?v=1.5.0"></script>
+<script src="questions-data.js?v=1.6.0"></script>
+<script src="script.js?v=1.6.0"></script>
 </body>
 </html>

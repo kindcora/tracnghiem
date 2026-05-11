@@ -731,8 +731,20 @@ function startQuiz(id) {
     document.getElementById('doQuiz').classList.add('active');
     // Đóng menu mobile nếu đang mở
     if (typeof closeMobileMenu === 'function') closeMobileMenu();
-    // Cuộn lên đầu trang để thấy tab làm bài
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    // Cuộn lên đầu trang NGAY LẬP TỨC (instant) để tránh hiển thị ở câu cuối
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    // Cuộn lại lần nữa sau khi DOM render xong (đảm bảo về đầu trang/câu 1)
+    requestAnimationFrame(() => {
+        window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+        // Cuộn câu đầu tiên vào tầm nhìn
+        const firstQ = document.querySelector('#doQuizContent .do-question');
+        if (firstQ) {
+            // Dùng scrollIntoView với block 'start' để câu 1 ở đầu màn hình
+            setTimeout(() => {
+                window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+            }, 50);
+        }
+    });
     initQuestionStatusPanel();
     updateProgress();
     resetCurrentQuestion();

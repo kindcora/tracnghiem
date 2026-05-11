@@ -1,5 +1,5 @@
 // Service Worker - QuizMaster Pro
-const CACHE_VERSION = 'quizmaster-v1.2.0-lazyrender';
+const CACHE_VERSION = 'quizmaster-v1.2.1-time1h';
 const CACHE_NAME = CACHE_VERSION;
 
 // Files cần cache để chạy offline

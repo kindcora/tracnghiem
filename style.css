@@ -118,7 +118,11 @@ body {
     box-shadow: var(--shadow);
     transition: 0.3s;
     border: 1px solid var(--border);
+    cursor: pointer;
+    user-select: none;
 }
+.feature-card:focus { outline: 2px solid var(--primary); outline-offset: 3px; }
+.feature-card:active { transform: translateY(-2px) scale(0.98); }
 .feature-card:hover { transform: translateY(-5px); border-color: var(--primary); }
 .feature-card .icon { font-size: 45px; margin-bottom: 12px; }
 .feature-card h3 { color: var(--text-main); margin-bottom: 10px; }

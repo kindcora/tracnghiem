@@ -551,6 +551,12 @@ function showSection(id, event) {
     document.getElementById(id).classList.add('active');
     document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
     if (event && event.target) event.target.classList.add('active');
+    else {
+        // Khi gọi showSection không có event, tự đồng bộ nav-btn active dựa trên id
+        const mapBtn = { home: 0, create: 1, list: 2, stats: 3 };
+        const navBtns = document.querySelectorAll('.nav-btn');
+        if (mapBtn[id] !== undefined && navBtns[mapBtn[id]]) navBtns[mapBtn[id]].classList.add('active');
+    }
     if (id === 'list') renderQuizList();
     if (id === 'stats') renderStats();
     if (id === 'create' && questions.length === 0) addQuestion();
@@ -563,6 +569,79 @@ function showSection(id, event) {
     
     // Cuộn lên đầu trang
     window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ============= XỬ LÝ CLICK FEATURE CARD (HOME) =============
+function handleFeatureClick(action) {
+    switch (action) {
+        case 'import': {
+            // Chuyển sang trang Tạo đề, cuộn tới khu vực import và highlight nó
+            showSection('create');
+            setTimeout(() => {
+                const importBox = document.querySelector('.import-box');
+                if (importBox) {
+                    importBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    importBox.style.transition = 'box-shadow 0.4s, transform 0.4s';
+                    importBox.style.boxShadow = '0 0 0 4px rgba(124,140,248,0.6)';
+                    importBox.style.transform = 'scale(1.02)';
+                    setTimeout(() => {
+                        importBox.style.boxShadow = '';
+                        importBox.style.transform = '';
+                    }, 1500);
+                }
+            }, 200);
+            break;
+        }
+        case 'export': {
+            // Nếu có đề thi đã lưu thì chuyển tới danh sách (nơi có nút Xuất CSV/Word)
+            // Nếu chưa có thì thông báo và mở trang tạo đề
+            const quizzes = JSON.parse(localStorage.getItem('quizzes') || '[]');
+            if (quizzes.length === 0) {
+                document.getElementById('modalContent').innerHTML = `
+                    <h2>📤 Xuất đề thi</h2>
+                    <p>Bạn chưa có đề thi nào để xuất. Hãy tạo hoặc nhập đề trước.</p>
+                    <div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap">
+                        <button class="btn-primary" onclick="document.getElementById('modal').style.display='none';showSection('create')">➕ Tạo đề ngay</button>
+                        <button class="btn-secondary" onclick="document.getElementById('modal').style.display='none'">Đóng</button>
+                    </div>`;
+                document.getElementById('modal').style.display = 'block';
+            } else {
+                showSection('list');
+                setTimeout(() => {
+                    const list = document.getElementById('quizList');
+                    if (list) {
+                        list.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                }, 200);
+            }
+            break;
+        }
+        case 'shuffle': {
+            // Chuyển sang trang Tạo đề, cuộn xuống ô "Trộn câu hỏi" và highlight
+            showSection('create');
+            setTimeout(() => {
+                const sq = document.getElementById('shuffleQuestions');
+                const so = document.getElementById('shuffleOptions');
+                if (sq) {
+                    sq.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    [sq, so].forEach(el => {
+                        if (!el) return;
+                        el.style.transition = 'box-shadow 0.4s, transform 0.4s';
+                        el.style.boxShadow = '0 0 0 3px rgba(124,140,248,0.6)';
+                        setTimeout(() => { el.style.boxShadow = ''; }, 1800);
+                    });
+                    sq.focus();
+                }
+            }, 200);
+            break;
+        }
+        case 'stats': {
+            showSection('stats');
+            break;
+        }
+        default:
+            console.warn('Unknown feature action:', action);
+    }
 }
 
 
@@ -1187,15 +1266,24 @@ pieChartObj = new Chart(document.getElementById('pieChart'), {
 function loadPreloadedQuizzes() {
     if (!window.PRELOADED_QUIZZES || !Array.isArray(window.PRELOADED_QUIZZES)) return;
     let added = 0;
+    let updated = 0;
     for (const pq of window.PRELOADED_QUIZZES) {
-        // Skip if already exists (by id)
-        if (quizzes.some(q => q.id === pq.id)) continue;
+        const existing = quizzes.find(q => q.id === pq.id);
+        if (existing) {
+            // Sync time from preloaded source (so updates to time take effect)
+            if (existing.time !== pq.time) {
+                existing.time = pq.time;
+                updated++;
+            }
+            continue;
+        }
         quizzes.push(pq);
         added++;
     }
-    if (added > 0) {
+    if (added > 0 || updated > 0) {
         localStorage.setItem('quizzes', JSON.stringify(quizzes));
-        console.log(`✅ Đã nạp ${added} bộ đề ôn tập có sẵn`);
+        if (added > 0) console.log(`✅ Đã nạp ${added} bộ đề ôn tập có sẵn`);
+        if (updated > 0) console.log(`🔄 Đã cập nhật thời gian cho ${updated} bộ đề`);
     }
 }
 

@@ -63,10 +63,10 @@
             <button class="btn-primary" onclick="startPreloadedQuiz()" style="background:#fff;color:#5b6ef0;width:auto;padding:10px 24px">▶️ Bắt đầu ôn tập</button>
         </div>
         <div class="features">
-            <div class="feature-card"><div class="icon">📥</div><h3>Nhập từ CSV/Word</h3><p>Import hàng loạt câu hỏi nhanh chóng</p></div>
-            <div class="feature-card"><div class="icon">📤</div><h3>Xuất đề thi</h3><p>Xuất ra file CSV hoặc Word đẹp mắt</p></div>
-            <div class="feature-card"><div class="icon">🎲</div><h3>Trộn câu hỏi</h3><p>Trộn ngẫu nhiên câu hỏi và đáp án</p></div>
-            <div class="feature-card"><div class="icon">📊</div><h3>Thống kê chi tiết</h3><p>Biểu đồ tiến độ học tập theo thời gian</p></div>
+            <div class="feature-card" role="button" tabindex="0" onclick="handleFeatureClick('import')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();handleFeatureClick('import')}"><div class="icon">📥</div><h3>Nhập từ CSV/Word</h3><p>Import hàng loạt câu hỏi nhanh chóng</p></div>
+            <div class="feature-card" role="button" tabindex="0" onclick="handleFeatureClick('export')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();handleFeatureClick('export')}"><div class="icon">📤</div><h3>Xuất đề thi</h3><p>Xuất ra file CSV hoặc Word đẹp mắt</p></div>
+            <div class="feature-card" role="button" tabindex="0" onclick="handleFeatureClick('shuffle')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();handleFeatureClick('shuffle')}"><div class="icon">🎲</div><h3>Trộn câu hỏi</h3><p>Trộn ngẫu nhiên câu hỏi và đáp án</p></div>
+            <div class="feature-card" role="button" tabindex="0" onclick="handleFeatureClick('stats')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();handleFeatureClick('stats')}"><div class="icon">📊</div><h3>Thống kê chi tiết</h3><p>Biểu đồ tiến độ học tập theo thời gian</p></div>
         </div>
     </div>
 </section>

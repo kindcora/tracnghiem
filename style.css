@@ -2804,3 +2804,54 @@ select:focus-visible,
 .tag-stats-table .tag-acc-high { color: #66bb6a; }
 .tag-stats-table tr.tag-stats-untagged td { color: var(--text-secondary); font-style: italic; }
 .tag-stats-good { color: #66bb6a; font-size: 12px; font-weight: 600; }
+
+/* ===== v2.2.0 — UX Polish (Batch A: P0 mobile fixes) ===== */
+
+/* iOS Safari: prevent zoom on input focus — universal 16px floor on mobile */
+@media (max-width: 768px) {
+    input[type="text"], input[type="number"], input[type="search"],
+    input[type="email"], input[type="password"], input[type="tel"],
+    input[type="url"], input[type="date"], input[type="datetime-local"],
+    textarea, select {
+        font-size: 16px !important;
+    }
+    /* Search inputs ngoài form-group */
+    #searchQuiz, #historySearch, .history-search, .history-filter,
+    #tagStatsQuiz, .tag-row-input input {
+        font-size: 16px !important;
+    }
+}
+
+/* QSP panel mobile: tăng z-index chắc chắn trên nút Nộp bài + safe-area-inset */
+@media (max-width: 600px) {
+    .question-status-panel {
+        z-index: 110;
+        bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+    }
+    .qsp-mobile-toggle {
+        z-index: 111;
+        bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+    }
+}
+
+/* Floating card mobile: full-width + scroll mượt khi keyboard mở (iOS) */
+@media (max-width: 600px) {
+    .floating-card {
+        top: 10px !important;
+        right: 10px !important;
+        left: 10px !important;
+        width: auto !important;
+        max-width: none !important;
+        max-height: calc(100vh - 20px) !important;
+        max-height: calc(100dvh - 20px) !important;
+    }
+    .fc-body {
+        -webkit-overflow-scrolling: touch;
+        max-height: calc(100vh - 80px) !important;
+        max-height: calc(100dvh - 80px) !important;
+    }
+    /* Khi keyboard mở (iOS Safari shrink viewport via dvh) — đảm bảo content vẫn scroll được */
+    .floating-card.active {
+        animation: none; /* tắt animation slide để tránh giật khi keyboard pops */
+    }
+}

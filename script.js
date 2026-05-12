@@ -3399,6 +3399,95 @@ window.renderTagStats = renderTagStats;
 // Chỉ load Chart.js khi user vào trang Stats lần đầu (~150KB savings on first load).
 // ============================================
 let __chartJsPromise = null;
+// ============================================
+// renderStats — main entry for Stats page (restored)
+// ============================================
+async function renderStats() {
+    try {
+        // 1) Overview cards
+        const ov = computeStatsOverview();
+        const overviewEl = document.getElementById('statsOverview');
+        if (overviewEl) {
+            if (!ov.total) {
+                overviewEl.innerHTML = '<div class="history-empty" style="grid-column:1/-1"><span class="emoji">📭</span>Chưa có dữ liệu thống kê.<br>Hãy làm vài đề để xem báo cáo nhé!</div>';
+            } else {
+                overviewEl.innerHTML = [
+                    {icon:'📝', num: ov.total, label:'Lượt làm bài', sub:`${ov.uniqueQuizzes} đề khác nhau`, v:1},
+                    {icon:'⭐', num: ov.avg, label:'Điểm trung bình', sub:`Cao nhất ${ov.max}`, v:2},
+                    {icon:'🏆', num: ov.max, label:'Điểm cao nhất', sub:'', v:3},
+                    {icon:'✅', num: ov.passRate + '%', label:'Tỉ lệ đạt (≥5)', sub:'', v:4},
+                    {icon:'🔥', num: ov.streak, label:'Chuỗi đạt gần nhất', sub:ov.streak ? 'liên tiếp ≥5đ' : '', v:5},
+                    {icon:'⏱️', num: formatDuration(ov.totalTime), label:'Tổng thời gian làm bài', sub:'', v:6}
+                ].map(c => `<div class="stat-card variant-${c.v}"><div class="icon">${c.icon}</div><div class="num">${c.num}</div><div class="label">${c.label}</div>${c.sub?`<div class="sub">${c.sub}</div>`:''}</div>`).join('');
+            }
+        }
+
+        // 2) Time-window
+        renderTimeWindowStats();
+
+        // 3) Per-quiz
+        renderPerQuizStats();
+
+        // 4) Tag stats dropdown
+        try { populateTagStatsDropdown(); renderTagStats(); } catch (_) {}
+
+        // 5) History list + filters bind once
+        renderHistoryList();
+        const sEl = document.getElementById('historySearch');
+        const fEl = document.getElementById('historyScoreFilter');
+        const dEl = document.getElementById('historyDateFilter');
+        [sEl, fEl, dEl].forEach(el => {
+            if (el && !el.__bound) {
+                el.addEventListener('input', renderHistoryList);
+                el.addEventListener('change', renderHistoryList);
+                el.__bound = true;
+            }
+        });
+
+        // 6) Charts (lazy Chart.js)
+        const scoreCanvas = document.getElementById('scoreChart');
+        const pieCanvas = document.getElementById('pieChart');
+        if (!history.length || !scoreCanvas || !pieCanvas) return;
+        try {
+            await ensureChartJs();
+        } catch (e) {
+            console.warn('[renderStats] Chart.js load failed:', e);
+            return;
+        }
+        if (typeof window.Chart !== 'function') return;
+        const sorted = [...history].sort((a,b)=>(a.timestamp||0)-(b.timestamp||0)).slice(-20);
+        const labels = sorted.map((h,i)=> (h.date||'').split(' ')[0] || ('#'+(i+1)));
+        const data = sorted.map(h=>h.score);
+        try { if (scoreChartObj) { scoreChartObj.destroy(); scoreChartObj = null; } } catch(_){}
+        try { if (pieChartObj) { pieChartObj.destroy(); pieChartObj = null; } } catch(_){}
+        try {
+            scoreChartObj = new window.Chart(scoreCanvas.getContext('2d'), {
+                type: 'line',
+                data: { labels, datasets: [{ label: 'Điểm', data, borderColor:'#667eea', backgroundColor:'rgba(102,126,234,0.18)', tension:0.3, fill:true, pointRadius:3 }]},
+                options: { responsive:true, maintainAspectRatio:false, scales:{ y:{ min:0, max:10 }}, plugins:{ legend:{ display:false }}}
+            });
+        } catch(e){ console.warn('[scoreChart]', e); }
+        const buckets = { 'Xuất sắc (≥8)':0, 'Khá (6.5-8)':0, 'TB (5-6.5)':0, 'Yếu (<5)':0 };
+        for (const h of history) {
+            if (h.score >= 8) buckets['Xuất sắc (≥8)']++;
+            else if (h.score >= 6.5) buckets['Khá (6.5-8)']++;
+            else if (h.score >= 5) buckets['TB (5-6.5)']++;
+            else buckets['Yếu (<5)']++;
+        }
+        try {
+            pieChartObj = new window.Chart(pieCanvas.getContext('2d'), {
+                type: 'doughnut',
+                data: { labels: Object.keys(buckets), datasets:[{ data: Object.values(buckets), backgroundColor:['#38ef7d','#667eea','#f7971e','#ee0979'] }]},
+                options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom' }}}
+            });
+        } catch(e){ console.warn('[pieChart]', e); }
+    } catch (e) {
+        console.error('[renderStats] fatal:', e);
+        try { showToast('⚠️ Lỗi hiển thị thống kê: ' + (e.message || e), 'error', 4000); } catch (_) {}
+    }
+}
+window.renderStats = renderStats;
+
 function ensureChartJs() {
     if (typeof window.Chart === 'function') return Promise.resolve();
     if (__chartJsPromise) return __chartJsPromise;

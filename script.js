@@ -803,12 +803,20 @@ loadPreloadedQuizzes();
 
 function startPreloadedQuiz() {
     try {
-        const preloaded = quizzes.filter(q => q.__preloaded && q.id != null && q.id >= 0);
-        if (!preloaded.length) {
+        // Prefer quiz dang co flag __preloaded
+        let target = quizzes.find(q => q.__preloaded && q.id != null && q.id >= 0);
+        // Fallback: dung id tu window.PRELOADED_QUIZZES (truong hop PC da co quiz luu tu session cu, khong co flag)
+        if (!target && typeof window !== 'undefined' && Array.isArray(window.PRELOADED_QUIZZES) && window.PRELOADED_QUIZZES.length) {
+            const firstId = window.PRELOADED_QUIZZES[0] && window.PRELOADED_QUIZZES[0].id;
+            if (firstId != null) target = quizzes.find(q => q.id === firstId);
+        }
+        // Fallback cuoi: dung quiz dau tien co trong danh sach
+        if (!target && quizzes.length) target = quizzes.find(q => q.id != null && q.id >= 0);
+        if (!target) {
             if (typeof showToast === 'function') showToast('Khong tim thay bo de on tap', 'error');
             return;
         }
-        startQuiz(preloaded[0].id);
+        startQuiz(target.id);
     } catch (e) { console.error('[startPreloadedQuiz]', e); }
 }
 window.startPreloadedQuiz = startPreloadedQuiz;

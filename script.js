@@ -311,6 +311,182 @@ function startWrongReview(quizId) {
 window.startWrongReview = startWrongReview;
 
 // ============================================
+// 🏷️ TAGS PER QUESTION (v2.1.0)
+// User tự gán tag (flat, 1 cấp) cho từng câu hỏi để theo dõi tiến độ theo chủ đề.
+// Storage:
+//   'userTags_<quizId>'    → { [origIndex: number]: string[] }
+//   'tagsCatalog_<quizId>' → string[]  (lịch sử tag đã dùng, autocomplete)
+// Cap: 5 tag/câu, 30 ký tự/tag. Tag được trim + lowercase-key để dedupe.
+// ============================================
+const TAG_MAX_PER_QUESTION = 5;
+const TAG_MAX_LEN = 30;
+function _tagsKey(quizId) { return 'userTags_' + quizId; }
+function _tagsCatalogKey(quizId) { return 'tagsCatalog_' + quizId; }
+function _normTag(t) {
+    if (t == null) return '';
+    let s = String(t).trim().replace(/\s+/g, ' ');
+    if (s.length > TAG_MAX_LEN) s = s.slice(0, TAG_MAX_LEN);
+    return s;
+}
+function getAllTagsMap(quizId) {
+    if (quizId == null) return {};
+    const obj = safeGetItem(_tagsKey(quizId), {});
+    return (obj && typeof obj === 'object') ? obj : {};
+}
+function getQuestionTags(quizId, origIndex) {
+    if (quizId == null || origIndex == null) return [];
+    const arr = getAllTagsMap(quizId)[origIndex];
+    return Array.isArray(arr) ? arr.slice() : [];
+}
+function setQuestionTags(quizId, origIndex, tags) {
+    if (quizId == null || origIndex == null) return false;
+    const map = getAllTagsMap(quizId);
+    const seen = new Set();
+    const norm = [];
+    (Array.isArray(tags) ? tags : []).forEach(t => {
+        const n = _normTag(t);
+        const key = n.toLowerCase();
+        if (n && !seen.has(key) && norm.length < TAG_MAX_PER_QUESTION) {
+            seen.add(key);
+            norm.push(n);
+        }
+    });
+    if (norm.length === 0) delete map[origIndex];
+    else map[origIndex] = norm;
+    const ok = safeSetItem(_tagsKey(quizId), map);
+    norm.forEach(t => addToTagsCatalog(quizId, t));
+    return ok;
+}
+function addTagToQuestion(quizId, origIndex, tag) {
+    const t = _normTag(tag);
+    if (!t) return false;
+    const cur = getQuestionTags(quizId, origIndex);
+    if (cur.length >= TAG_MAX_PER_QUESTION) return false;
+    const lk = t.toLowerCase();
+    if (cur.some(x => x.toLowerCase() === lk)) return false;
+    cur.push(t);
+    return setQuestionTags(quizId, origIndex, cur);
+}
+function removeTagFromQuestion(quizId, origIndex, tag) {
+    const t = _normTag(tag).toLowerCase();
+    if (!t) return false;
+    const cur = getQuestionTags(quizId, origIndex).filter(x => x.toLowerCase() !== t);
+    return setQuestionTags(quizId, origIndex, cur);
+}
+function getTagsCatalog(quizId) {
+    if (quizId == null) return [];
+    const arr = safeGetItem(_tagsCatalogKey(quizId), []);
+    return Array.isArray(arr) ? arr.slice() : [];
+}
+function addToTagsCatalog(quizId, tag) {
+    const t = _normTag(tag);
+    if (!t) return false;
+    const arr = getTagsCatalog(quizId);
+    const lk = t.toLowerCase();
+    if (arr.some(x => x.toLowerCase() === lk)) return false;
+    arr.push(t);
+    arr.sort((a, b) => a.localeCompare(b, 'vi'));
+    return safeSetItem(_tagsCatalogKey(quizId), arr);
+}
+function countTaggedQuestions(quizId) {
+    return Object.keys(getAllTagsMap(quizId)).length;
+}
+
+
+// --- Tag editor UI (floating card) ---
+let __tagEditorQuizId = null;
+function openTagEditor(quizId) {
+    try {
+        const quiz = quizzes.find(q => q.id === quizId);
+        if (!quiz) { if (typeof showToast === 'function') showToast('Khong tim thay de!', 'error'); return; }
+        __tagEditorQuizId = quizId;
+        const titleEl = document.getElementById('tagEditorTitle');
+        if (titleEl) titleEl.textContent = '\u{1F3F7}\uFE0F Quan ly tag - ' + quiz.title;
+        renderTagEditor();
+        if (typeof openFloatingCard === 'function') openFloatingCard('tagEditorCard');
+    } catch (e) { console.error('[openTagEditor]', e); }
+}
+window.openTagEditor = openTagEditor;
+
+function renderTagEditor() {
+    const host = document.getElementById('tagEditorContent');
+    if (!host || __tagEditorQuizId == null) return;
+    const quizId = __tagEditorQuizId;
+    const quiz = quizzes.find(q => q.id === quizId);
+    if (!quiz) { host.innerHTML = '<p>Khong tim thay de.</p>'; return; }
+    const catalog = getTagsCatalog(quizId);
+    const tagged = countTaggedQuestions(quizId);
+    const total = quiz.questions.length;
+    const datalistId = 'tagCatalog_' + quizId;
+    const dl = '<datalist id="' + datalistId + '">' +
+        catalog.map(t => '<option value="' + escapeHtml(t) + '"></option>').join('') +
+        '</datalist>';
+    const header = '<div class="tag-editor-summary">' +
+        '<span>Da gan tag: <b>' + tagged + '</b>/' + total + ' cau</span>' +
+        ' \u00B7 <span>Catalog: <b>' + catalog.length + '</b> tag</span>' +
+        '</div>';
+    const rows = quiz.questions.map((q, idx) => {
+        const tags = getQuestionTags(quizId, idx);
+        const chips = tags.map(t => {
+            const safe = escapeHtml(t);
+            const attr = safe.replace(/"/g, '&quot;');
+            return '<span class="tag-chip">' + safe +
+                ' <button class="tag-chip-x" onclick="removeTagFromEditor(' + idx + ',&quot;' + attr + '&quot;)" title="Bo tag" aria-label="Bo tag">\u00D7</button>' +
+                '</span>';
+        }).join('');
+        const qText = escapeHtml((q.question || '').slice(0, 120));
+        const more = (q.question || '').length > 120 ? '\u2026' : '';
+        const full = tags.length >= TAG_MAX_PER_QUESTION;
+        const inputDisabled = full ? ' disabled' : '';
+        const inputPh = full ? 'Toi da ' + TAG_MAX_PER_QUESTION + ' tag' : '+ Them tag\u2026';
+        return '<div class="tag-row" data-orig="' + idx + '">' +
+            '<div class="tag-row-q"><span class="tag-row-num">' + (idx + 1) + '.</span> ' + qText + more + '</div>' +
+            '<div class="tag-row-chips">' + (chips || '<i class="tag-empty">(chua co tag)</i>') + '</div>' +
+            '<div class="tag-row-input">' +
+                '<input type="text" list="' + datalistId + '" maxlength="' + TAG_MAX_LEN + '" placeholder="' + inputPh + '" onkeydown="onTagInputKey(event,' + idx + ')"' + inputDisabled + '>' +
+                '<button class="btn-mini" onclick="addTagFromEditor(' + idx + ')"' + (full ? ' disabled' : '') + '>Them</button>' +
+            '</div>' +
+        '</div>';
+    }).join('');
+    host.innerHTML = dl + header + '<div class="tag-rows">' + rows + '</div>';
+}
+window.renderTagEditor = renderTagEditor;
+
+function _getTagRowInput(origIndex) {
+    const row = document.querySelector('.tag-row[data-orig="' + origIndex + '"]');
+    return row ? row.querySelector('input[type="text"]') : null;
+}
+function addTagFromEditor(origIndex) {
+    if (__tagEditorQuizId == null) return;
+    const input = _getTagRowInput(origIndex);
+    if (!input) return;
+    const val = input.value;
+    const ok = addTagToQuestion(__tagEditorQuizId, origIndex, val);
+    if (ok) {
+        input.value = '';
+        renderTagEditor();
+        if (typeof showToast === 'function') showToast('\u{1F3F7}\uFE0F Da them tag', 'success', 900);
+    } else if (val && val.trim()) {
+        if (typeof showToast === 'function') showToast('Tag da ton tai hoac day (toi da ' + TAG_MAX_PER_QUESTION + ')', 'info', 1500);
+    }
+}
+window.addTagFromEditor = addTagFromEditor;
+
+function removeTagFromEditor(origIndex, tag) {
+    if (__tagEditorQuizId == null) return;
+    removeTagFromQuestion(__tagEditorQuizId, origIndex, tag);
+    renderTagEditor();
+}
+window.removeTagFromEditor = removeTagFromEditor;
+
+function onTagInputKey(ev, origIndex) {
+    if (ev && ev.key === 'Enter') {
+        ev.preventDefault();
+        addTagFromEditor(origIndex);
+    }
+}
+window.onTagInputKey = onTagInputKey;
+// ============================================
 // 💾 RESUME UNFINISHED QUIZ (v1.9.0 — Feature 4)
 // Auto-save mỗi 5s state làm bài (userAnswers, timeLeft, thứ tự câu/đáp án).
 // Cho phép "Tiếp tục bài đang dở" khi app bị kill / đóng tab giữa chừng.
@@ -1588,6 +1764,7 @@ function renderQuizList() {
                 ${bmBtn}
                 <button class="btn-success" data-action="practice" title="Luyện tập với phản hồi tức thì">📖 Luyện tập</button>
                 <button class="btn-warning" data-action="flashcard" title="Học bằng flashcard">🃏 Flashcard</button>
+                <button class="btn-info" data-action="tag" title="Quan ly tag/chu de">🏷️ Tag</button>
                 <button class="btn-secondary" data-action="customize">⚙️ Tùy chỉnh</button>
                 <button class="btn-info" data-action="csv">📄 CSV</button>
                 <button class="btn-info" data-action="word">📝 Word</button>
@@ -1612,6 +1789,7 @@ function renderQuizList() {
                 case 'practice':  return startPractice(id);
                 case 'flashcard': return startFlashcard(id);
                 case 'customize': return customizeQuiz(id);
+                case 'tag':       return openTagEditor(id);
                 case 'csv':       return exportCSV(id);
                 case 'word':      return exportWord(id);
                 case 'delete':    return deleteQuiz(id);

@@ -2733,3 +2733,54 @@ select:focus-visible,
     }
 }
 
+
+/* ===== Tag editor (v2.1.0) ===== */
+.tag-editor-summary {
+    padding: 8px 12px; margin-bottom: 12px;
+    background: var(--bg-secondary, rgba(255,255,255,0.04));
+    border-radius: 8px; font-size: 13px; color: var(--text-secondary);
+}
+.tag-rows { display: flex; flex-direction: column; gap: 10px; }
+.tag-row {
+    padding: 10px; border-radius: 8px;
+    background: var(--bg-secondary, rgba(255,255,255,0.03));
+    border: 1px solid var(--border-color, rgba(255,255,255,0.08));
+}
+.tag-row-q { font-size: 13px; color: var(--text-main); margin-bottom: 6px; line-height: 1.4; }
+.tag-row-num { color: var(--primary, #7c8cf8); font-weight: 600; margin-right: 4px; }
+.tag-row-chips { display: flex; flex-wrap: wrap; gap: 6px; min-height: 28px; margin-bottom: 8px; }
+.tag-empty { color: var(--text-secondary); font-size: 12px; font-style: italic; }
+.tag-chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 8px; font-size: 12px;
+    background: rgba(124,140,248,0.15); color: var(--primary, #7c8cf8);
+    border: 1px solid rgba(124,140,248,0.35); border-radius: 12px;
+}
+.tag-chip-x {
+    background: transparent; border: none; color: inherit;
+    cursor: pointer; padding: 0 2px; font-size: 14px; line-height: 1;
+    opacity: 0.7;
+}
+.tag-chip-x:hover { opacity: 1; color: #ff6b6b; }
+.tag-row-input { display: flex; gap: 6px; }
+.tag-row-input input[type="text"] {
+    flex: 1; padding: 6px 10px; font-size: 13px;
+    border: 1px solid var(--border-color, rgba(255,255,255,0.15));
+    border-radius: 6px; background: var(--bg-input, rgba(0,0,0,0.2));
+    color: var(--text-main);
+}
+.tag-row-input input[type="text"]:focus {
+    outline: 2px solid var(--primary, #7c8cf8); outline-offset: 1px;
+    border-color: transparent;
+}
+.tag-row-input input[type="text"]:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-mini {
+    padding: 6px 12px; font-size: 12px; border: none; border-radius: 6px;
+    background: var(--primary, #7c8cf8); color: #fff; cursor: pointer;
+    font-weight: 600;
+}
+.btn-mini:hover:not(:disabled) { filter: brightness(1.1); }
+.btn-mini:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Meta badge tag count trên quiz card */
+.meta-tag { color: #5ac8fa; font-weight: 600; }

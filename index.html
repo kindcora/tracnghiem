@@ -54,8 +54,14 @@
         <div class="hero">
             <h1>QuizMaster Pro 🎓</h1>
             <p>Tạo đề trắc nghiệm chuyên nghiệp - Nhập/Xuất CSV, Word - Thống kê chi tiết</p>
-            <button class="btn-primary" onclick="showSection('create')">🚀 Bắt đầu</button>
-            <button class="btn-secondary" onclick="startPreloadedQuiz()" style="margin-left:10px">📚 Ôn tập ngay (Bộ đề 2026)</button>
+            <p style="margin-top:8px;opacity:0.85;font-size:14px">Chọn 1 trong 2 cách học:</p>
+            <div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:8px">
+                <button class="btn-success" onclick="startPreloadedPractice()" title="Hiện đáp án + giải thích ngay sau khi chọn" style="width:auto;padding:12px 22px">📖 Luyện tập (hiện đáp án ngay)</button>
+                <button class="btn-primary" onclick="startPreloadedQuiz()" title="Làm như thi — chỉ chấm khi nộp bài" style="width:auto;padding:12px 22px">📝 Ôn tập / Làm bài (chấm khi nộp)</button>
+            </div>
+            <div style="margin-top:10px">
+                <button class="btn-secondary" onclick="showSection('create')" style="width:auto;padding:8px 18px">➕ Tạo đề mới</button>
+            </div>
             <div style="margin-top:14px">
                 <button onclick="clearCacheAndReload()" title="Dùng khi trang bị lỗi, không bấm vào nút được" style="background:transparent;border:1px dashed #888;color:#888;padding:6px 14px;border-radius:8px;font-size:12px;cursor:pointer">🧹 Xóa cache & tải lại (nếu trang bị lỗi)</button>
             </div>
@@ -64,7 +70,11 @@
         <div id="preloadedBanner" style="max-width:800px;margin:20px auto;padding:16px 20px;background:linear-gradient(135deg,#7c8cf8,#5b6ef0);color:#fff;border-radius:12px;text-align:center;box-shadow:0 4px 20px rgba(124,140,248,0.4)">
             <h3 style="margin:0 0 8px 0">📚 Bộ đề ôn tập tổng hợp 2026</h3>
             <p style="margin:0 0 12px 0;opacity:0.95">Văn hóa doanh nghiệp + Nâng giữ bậc nghề Kinh doanh — <b>450 câu hỏi</b> đã được tổng hợp & lọc trùng</p>
-            <button class="btn-primary" onclick="startPreloadedQuiz()" style="background:#fff;color:#5b6ef0;width:auto;padding:10px 24px">▶️ Bắt đầu ôn tập</button>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center">
+                <button class="btn-primary" onclick="startPreloadedPractice()" title="Luyện tập: chọn đáp án là biết đúng/sai ngay" style="background:#fff;color:#5b6ef0;width:auto;padding:10px 20px">📖 Luyện tập (hiện đáp án ngay)</button>
+                <button class="btn-primary" onclick="startPreloadedQuiz()" title="Ôn tập như đi thi: chỉ chấm khi nộp" style="background:rgba(255,255,255,0.18);color:#fff;border:1px solid rgba(255,255,255,0.6);width:auto;padding:10px 20px">📝 Ôn tập (chấm khi nộp)</button>
+            </div>
+            <p style="margin:10px 0 0;font-size:12px;opacity:0.85">💡 Luyện tập = học từng câu · Ôn tập = tự kiểm tra như đi thi</p>
         </div>
         <div class="features">
             <div class="feature-card" role="button" tabindex="0" onclick="handleFeatureClick('import')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();handleFeatureClick('import')}"><div class="icon">📥</div><h3>Nhập từ CSV/Word</h3><p>Import hàng loạt câu hỏi nhanh chóng</p></div>

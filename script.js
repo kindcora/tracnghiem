@@ -821,6 +821,24 @@ function startPreloadedQuiz() {
 }
 window.startPreloadedQuiz = startPreloadedQuiz;
 
+// Luyen tap voi bo de preloaded — hien dap an ngay sau khi chon
+function startPreloadedPractice() {
+    try {
+        let target = quizzes.find(q => q.__preloaded && q.id != null && q.id >= 0);
+        if (!target && typeof window !== 'undefined' && Array.isArray(window.PRELOADED_QUIZZES) && window.PRELOADED_QUIZZES.length) {
+            const firstId = window.PRELOADED_QUIZZES[0] && window.PRELOADED_QUIZZES[0].id;
+            if (firstId != null) target = quizzes.find(q => q.id === firstId);
+        }
+        if (!target && quizzes.length) target = quizzes.find(q => q.id != null && q.id >= 0);
+        if (!target) {
+            if (typeof showToast === 'function') showToast('Khong tim thay bo de luyen tap', 'error');
+            return;
+        }
+        startPractice(target.id);
+    } catch (e) { console.error('[startPreloadedPractice]', e); }
+}
+window.startPreloadedPractice = startPreloadedPractice;
+
 let history = safeGetItem('history', []);
 let currentQuiz = null, shuffledQuiz = null;
 let userAnswers = {};

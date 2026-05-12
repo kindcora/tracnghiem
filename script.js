@@ -783,6 +783,36 @@ window.clearResume = clearResume;
 
 let questions = [];
 let quizzes = safeGetItem('quizzes', []);
+
+// v2.2.1 - Merge preloaded quizzes from questions-data.js (window.PRELOADED_QUIZZES)
+// Bug fix: nut 'On tap ngay' / 'Bat dau' khong hoat dong + bo de bien mat tren mobile
+function loadPreloadedQuizzes() {
+    try {
+        const preloaded = (typeof window !== 'undefined' && Array.isArray(window.PRELOADED_QUIZZES))
+            ? window.PRELOADED_QUIZZES : [];
+        if (!preloaded.length) return;
+        const existingIds = new Set(quizzes.map(q => q.id));
+        preloaded.forEach(pq => {
+            if (!pq || pq.id == null) return;
+            if (existingIds.has(pq.id)) return; // user da co (vd da custom save)
+            quizzes.push(Object.assign({}, pq, { __preloaded: true }));
+        });
+    } catch (e) { console.warn('[loadPreloadedQuizzes]', e); }
+}
+loadPreloadedQuizzes();
+
+function startPreloadedQuiz() {
+    try {
+        const preloaded = quizzes.filter(q => q.__preloaded && q.id != null && q.id >= 0);
+        if (!preloaded.length) {
+            if (typeof showToast === 'function') showToast('Khong tim thay bo de on tap', 'error');
+            return;
+        }
+        startQuiz(preloaded[0].id);
+    } catch (e) { console.error('[startPreloadedQuiz]', e); }
+}
+window.startPreloadedQuiz = startPreloadedQuiz;
+
 let history = safeGetItem('history', []);
 let currentQuiz = null, shuffledQuiz = null;
 let userAnswers = {};

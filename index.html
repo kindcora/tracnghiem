@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/192/3976/3976625.png">
 <title>QuizMaster Pro - Tạo Đề Trắc Nghiệm</title>
-<link rel="stylesheet" href="style.css?v=1.9.0">
+<link rel="stylesheet" href="style.css?v=2.0.0">
 <!-- Thư viện đọc file Word (.docx) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 <!-- Thư viện tạo file Word -->
@@ -20,6 +20,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
+    <a href="#main-content" class="skip-link">Bỏ qua đến nội dung chính</a>
     <!-- Particles background -->
 <!-- Trạng thái Online/Offline -->
 <div id="connectionStatus" class="connection-status"></div>
@@ -35,7 +36,7 @@
     <div class="container">
         <div class="logo">📚 QuizMaster <span class="pro-badge">PRO</span></div>
         <button class="hamburger" id="hamburger" onclick="toggleMobileMenu()" aria-label="Menu">☰</button>
-        <nav id="mainNav">
+        <nav id="mainNav" role="navigation" aria-label="Điều hướng chính">
             <button class="nav-btn active" onclick="showSection('home', event)">🏠 Trang chủ</button>
             <button class="nav-btn" onclick="showSection('create', event)">➕ Tạo đề</button>
             <button class="nav-btn" onclick="showSection('list', event)">📋 Danh sách</button>
@@ -47,6 +48,7 @@
 <div class="mobile-menu-overlay" id="menuOverlay" onclick="toggleMobileMenu()"></div>
 
 <!-- Trang chủ -->
+<main id="main-content" role="main" tabindex="-1">
 <section id="home" class="section active">
     <div class="container">
         <div class="hero">
@@ -131,9 +133,9 @@
     <div class="container">
         <div class="quiz-header">
             <h2 id="doQuizTitle"></h2>
-            <div class="timer">⏱️ <span id="timer">00:00</span></div>
+            <div class="timer" role="timer" aria-live="polite" aria-atomic="true" aria-label="Thời gian còn lại">⏱️ <span id="timer">00:00</span></div>
         </div>
-        <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
+        <div class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Tiến độ làm bài"><div id="progressFill" class="progress-fill"></div></div>
         <div id="doQuizContent"></div>
         <button class="btn-primary" onclick="submitQuiz()">✅ Nộp bài</button>
 
@@ -170,7 +172,7 @@
                 <span class="practice-stat practice-stat-total"><span id="practiceCurrent">0</span>/<span id="practiceTotal">0</span></span>
             </div>
         </div>
-        <div class="progress-bar"><div id="practiceProgressFill" class="progress-fill"></div></div>
+        <div class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Tiến độ luyện tập"><div id="practiceProgressFill" class="progress-fill"></div></div>
         <div id="practiceContent" class="practice-content"></div>
         <div class="practice-nav">
             <button class="btn-secondary" id="practicePrevBtn" onclick="practicePrev()">⬅️ Câu trước</button>
@@ -192,7 +194,7 @@
                 <span class="flashcard-stat"><span id="fcCurrent">0</span>/<span id="fcTotal">0</span></span>
             </div>
         </div>
-        <div class="progress-bar"><div id="fcProgressFill" class="progress-fill"></div></div>
+        <div class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Tiến độ flashcard"><div id="fcProgressFill" class="progress-fill"></div></div>
 
         <div class="flashcard-wrapper" id="flashcardWrapper">
             <div class="flashcard" id="flashcardEl" onclick="flashcardFlip()" tabindex="0" role="button" aria-label="Bấm để lật thẻ">
@@ -283,6 +285,7 @@
 </section>
 
 <!-- Floating Card: Hướng dẫn định dạng (v1.8.0) -->
+</main>
 <div id="modal" class="floating-card" data-fc-id="formatGuide">
     <div class="fc-header">
         <div class="fc-title">📋 Hướng dẫn định dạng</div>
@@ -344,7 +347,7 @@
     <p style="margin:0">© QuizMaster Pro · <b>Cre: KindCora</b> 💜</p>
 </footer>
 
-<script src="questions-data.js?v=1.9.0"></script>
-<script src="script.js?v=1.9.0"></script>
+<script src="questions-data.js?v=2.0.0"></script>
+<script src="script.js?v=2.0.0"></script>
 </body>
 </html>

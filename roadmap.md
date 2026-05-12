@@ -152,3 +152,25 @@ Biến app từ "máy chấm trắc nghiệm" thành công cụ ÔN TẬP THÔNG
 - `node --check script.js` PASS
 - `node --check sw.js` PASS
 
+
+---
+
+# v2.0.0 — Compare Mode + Accessibility Polish
+
+## Shipped
+- ✅ **Compare Mode** — so sánh 2 lần làm bài (cùng quiz hoặc khác quiz) song song: điểm, thời gian, breakdown câu đúng/sai, highlight chênh lệch.
+- ✅ **Accessibility polish** — focus ring rõ hơn, aria-labels cho nút icon, keyboard nav cho floating cards, contrast tăng cho dark mode, skip-to-content link, role="dialog" + aria-modal cho floating cards.
+- ✅ Bump `?v=2.0.0` ở `index.html` (style.css, questions-data.js, script.js).
+- ✅ Bump `sw.js` CACHE_VERSION → `quizmaster-v2.0.0-polish`.
+
+## Skipped / Deferred
+- ⏭️ **#19 Gzip thủ công cho `questions-data.js`** — **Skipped**.
+  - **Lý do:** GitHub Pages tự gzip mọi file `.js`/`.html`/`.css` trên đường truyền (transfer compression) → user thực tế đã nhận ~60 KB chứ không phải 250 KB.
+  - **ROI thấp:** Chỉ tiết kiệm ở SW cache offline (vài chục KB) và case host nơi khác (chưa có kế hoạch).
+  - **Chi phí cao:** Pipeline build (`build-gz.js` hoặc GitHub Actions) + loader fallback `CompressionStream` + risk regression không tương xứng với lợi ích.
+  - **Re-open khi nào:** Nếu chuyển host sang nơi không tự gzip, hoặc khi `questions-data.js` vượt 1 MB.
+
+## Verify
+- `?v=2.0.0` ở `index.html` ✅
+- `CACHE_VERSION = 'quizmaster-v2.0.0-polish'` ở `sw.js` ✅
+

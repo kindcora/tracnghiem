@@ -107,3 +107,34 @@
 - [x] `node --check sw.js` PASS
 - [ ] Manual test 4 features trên desktop + mobile (user action)
 
+
+---
+
+# Task Checklist — v2.0.0 (Compare + a11y)
+
+## 🔀 Compare Mode
+- [x] UI chọn 2 lần làm bài từ history
+- [x] Render bảng so sánh điểm/thời gian/breakdown
+- [x] Highlight chênh lệch câu đúng/sai
+- [x] Entry point từ trang Stats / History
+
+## ♿ Accessibility polish
+- [x] Focus ring visible trên mọi interactive element
+- [x] aria-label cho nút icon (bookmark, close, minimize, theme toggle…)
+- [x] role="dialog" + aria-modal cho floating cards
+- [x] Keyboard nav cho floating cards (Tab trap, Esc close)
+- [x] Skip-to-content link
+- [x] Contrast AA cho dark mode
+
+## 🚀 Release
+- [x] Bump `?v=2.0.0` trong `index.html`
+- [x] Bump `sw.js` CACHE_VERSION → `quizmaster-v2.0.0-polish`
+- [x] `node --check script.js` PASS
+- [x] `node --check sw.js` PASS
+- [ ] Manual test Compare + a11y trên desktop + mobile (user action)
+
+## ⏭️ Skipped
+- [~] **#19 Gzip thủ công cho `questions-data.js`** — Skipped.
+  - Reason: GitHub Pages tự gzip → ROI thấp, chi phí pipeline build cao.
+  - Detail: xem roadmap.md mục v2.0.0 → Skipped.
+

@@ -1178,6 +1178,10 @@ function createParticles() {
 function showToast(message, type = 'success', duration = 3000) {
     const toast = document.createElement('div');
     toast.className = 'toast ' + type;
+    // v2.0.0 — a11y: thông báo cho screen reader (error → assertive, còn lại polite)
+    toast.setAttribute('role', type === 'error' ? 'alert' : 'status');
+    toast.setAttribute('aria-live', type === 'error' ? 'assertive' : 'polite');
+    toast.setAttribute('aria-atomic', 'true');
     const icon = type === 'success' ? '✅' : type === 'error' ? '❌' : '⚠️';
     toast.innerHTML = `${icon} ${message}`;
     document.body.appendChild(toast);
@@ -1932,7 +1936,17 @@ function updateTimer() {
 function updateProgress() {
     const total = shuffledQuiz.questions.length;
     const done = Object.keys(userAnswers).length;
-    document.getElementById('progressFill').style.width = (done/total*100) + '%';
+    const pct = Math.round((done / total) * 100);
+    const fill = document.getElementById('progressFill');
+    if (fill) {
+        fill.style.width = pct + '%';
+        // v2.0.0 — a11y: cập nhật aria-valuenow trên progressbar parent
+        const bar = fill.parentElement;
+        if (bar) {
+            bar.setAttribute('aria-valuenow', String(pct));
+            bar.setAttribute('aria-valuetext', `${done} trên ${total} câu (${pct}%)`);
+        }
+    }
     updateQuestionStatusPanel();
 }
 
@@ -2032,6 +2046,36 @@ function _calculateQuizScore(correct, total) {
  */
 function _buildResultHtml(scoreInfo, correct, total, timeStr, reviewVisible) {
     const { score, percent, emoji, label, scoreClass } = scoreInfo;
+    // v2.0.0 — So sánh điểm với lần làm gần nhất cùng quiz (Feature #9)
+    let __compareBanner = '';
+    try {
+        const __cmpQuizId = currentQuiz && currentQuiz.id;
+        if (__cmpQuizId != null && Array.isArray(history) && history.length >= 2) {
+            // Lần vừa nộp đã ở cuối history. Tìm entry liền trước cùng quizId.
+            const __sameQuiz = history.filter(h => h && h.quizId === __cmpQuizId);
+            if (__sameQuiz.length >= 2) {
+                const __prev = __sameQuiz[__sameQuiz.length - 2];
+                const __prevScore = typeof __prev.score === 'number' ? __prev.score : parseFloat(__prev.score);
+                const __curScore = typeof scoreInfo.score === 'number' ? scoreInfo.score : parseFloat(scoreInfo.score);
+                if (!isNaN(__prevScore) && !isNaN(__curScore)) {
+                    const __diff = +(__curScore - __prevScore).toFixed(2);
+                    const __prevDate = __prev.date || '';
+                    let __cmpClass, __cmpIcon, __cmpText;
+                    if (__diff > 0) {
+                        __cmpClass = 'up'; __cmpIcon = '🆙'; __cmpText = `Tăng <b>+${__diff}</b> điểm so với lần trước (${__prevScore} → ${__curScore})`;
+                    } else if (__diff < 0) {
+                        __cmpClass = 'down'; __cmpIcon = '📉'; __cmpText = `Giảm <b>${__diff}</b> điểm so với lần trước (${__prevScore} → ${__curScore})`;
+                    } else {
+                        __cmpClass = 'flat'; __cmpIcon = '➡️'; __cmpText = `Giữ vững <b>${__curScore}</b> điểm (như lần trước)`;
+                    }
+                    const __attemptN = __sameQuiz.length;
+                    __compareBanner = `<div class="result-compare-row ${__cmpClass}" title="Lần trước: ${escapeHtml(__prevDate)}"><span class="result-compare-icon">${__cmpIcon}</span><span class="result-compare-text">${__cmpText}</span><span class="result-compare-meta">Lần thứ ${__attemptN}</span></div>`;
+                }
+            } else if (__sameQuiz.length === 1) {
+                __compareBanner = `<div class="result-compare-row first"><span class="result-compare-icon">🌱</span><span class="result-compare-text">Lần đầu làm đề này — kết quả sẽ là mốc để so sánh các lần sau!</span></div>`;
+            }
+        }
+    } catch (e) { console.warn('[compareScores]', e); }
     // v1.9.0 — Bookmark count cho banner & nút làm lại câu đánh dấu
     const __bmQuizId = currentQuiz && currentQuiz.id;
     const __bmList = __bmQuizId != null ? getBookmarks(__bmQuizId) : [];
@@ -2047,6 +2091,7 @@ function _buildResultHtml(scoreInfo, correct, total, timeStr, reviewVisible) {
         : (__wrongQuizId != null && getWrongSet(__wrongQuizId).length === 0 && Object.keys(getNotes(__wrongQuizId)).length === 0 ? '' : (__wrongQuizId != null && getWrongSet(__wrongQuizId).length === 0 ? `<div class="result-wrong-row good"><span>🎉 Tuyệt! Bạn không còn câu nào sai cho đề này</span></div>` : ''));
     return `
         <div class="result-box ${scoreClass}">
+            ${__compareBanner}
             <div class="result-emoji-big">${emoji}</div>
             <h3 class="result-score-big">${score}<span class="result-score-max">/10</span></h3>
             <p class="result-grade">${label}</p>

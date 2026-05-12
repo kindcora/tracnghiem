@@ -174,3 +174,43 @@ Biến app từ "máy chấm trắc nghiệm" thành công cụ ÔN TẬP THÔNG
 - `?v=2.0.0` ở `index.html` ✅
 - `CACHE_VERSION = 'quizmaster-v2.0.0-polish'` ở `sw.js` ✅
 
+
+---
+
+# v2.1.0 — Tag & Progress by Topic
+
+## Goal
+Cho phép user tự gắn tag (flat, 1 cấp) vào từng câu hỏi để theo dõi tiến độ theo chủ đề, biết chỗ yếu của mình.
+
+## Shipped (Phương án A — wrong-set snapshot)
+- ✅ **Tag storage helpers** — getQuestionTags / setQuestionTags / addTagToQuestion / removeTagFromQuestion / getTagsCatalog / addToTagsCatalog / countTaggedQuestions. Cap 5 tag/câu × 30 ký tự, dedupe case-insensitive, sort theo locale i. Storage keys userTags_<quizId> + 	agsCatalog_<quizId> (đồng nhất pattern bookmark/note/wrong).
+- ✅ **Tag editor floating card** — #tagEditorCard (reuse pattern v1.8.0). Mở từ nút 🏷️ Tag trên quiz card. Hiển thị: summary đếm câu đã gán + catalog count, danh sách từng câu với chip tag (× để gỡ) + input autocomplete từ <datalist> + nút Thêm/Enter.
+- ✅ **Stats per-tag tab** (#tagStatsContent trong trang Stats). Bảng: Tag | Số câu | Còn sai | Accuracy | Hành động. Sort accuracy tăng dần. Highlight <70% đỏ / 70–85% vàng / ≥85% xanh. Có hàng riêng cho (Chưa phân loại). Dropdown chọn quiz tự populate khi vào trang Stats.
+- ✅ **Wrong-by-tag review** — startWrongByTagReview(quizId, tag) tạo quiz tạm id âm với flag __wrongByTagOf + __wrongByTagName. Submit quiz tạm cập nhật wrong-set của quiz GỐC. Notes + result banner đọc từ quiz gốc qua chuỗi fallback __bookmarkReviewOf → __wrongByTagOf → __wrongReviewOf → id.
+- ✅ Bump ?v=2.1.0 ở index.html (style.css, questions-data.js, script.js).
+- ✅ Bump sw.js CACHE_VERSION → quizmaster-v2.1.0-tags.
+
+## Deferred sang v2.2.0
+- ⏭️ **Trend 7 ngày per-tag** — yêu cầu mở rộng history schema (correctMap: number[]) để biết câu nào đúng/sai trong từng lần làm. Hiện stats per-tag chỉ là snapshot wrong-set hiện tại (không có chiều thời gian). Re-open nếu thấy cần trend.
+
+## Files Modified
+- script.js — block tag storage helpers + tag editor UI + computeTagStats + populateTagStatsDropdown + renderTagStats + startWrongByTagReview + hook trong submitQuiz/note rendering.
+- index.html — #tagEditorCard floating card + section #tagStatsContent + dropdown #tagStatsQuiz trong trang Stats.
+- style.css — chip, row, btn-mini, meta-tag (editor) + tag-stats-table với 3 mức màu accuracy.
+- sw.js — CACHE_VERSION bump.
+
+## Design Decisions
+- Phương án A (wrong-set snapshot) thay vì B (mở rộng history schema) — ship được nhanh, không bloat localStorage, đường lui rõ ràng (bump v2.2.0 thêm correctMap nếu cần).
+- Tag flat, không hierarchical — đơn giản, dễ dùng cho lần đầu.
+- Không preset tag mặc định — user tự gõ, autocomplete xuất hiện từ tag thứ 2 trở đi (datalist).
+- Không bulk action — gán/gỡ từng câu để code gọn.
+- Storage key dùng origIndex (idempotent qua shuffle) — đồng nhất với bookmark/note/wrong hiện có.
+- Tag editor card reuse exact pattern floating-card của v1.8.0 — không tạo CSS mới cho header/min/close.
+
+## Verify
+- 
+ode --check script.js PASS
+- 
+ode --check sw.js PASS
+- ?v=2.1.0 ở index.html ✅
+- CACHE_VERSION = 'quizmaster-v2.1.0-tags' ở sw.js ✅

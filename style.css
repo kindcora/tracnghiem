@@ -2784,3 +2784,23 @@ select:focus-visible,
 
 /* Meta badge tag count trên quiz card */
 .meta-tag { color: #5ac8fa; font-weight: 600; }
+
+/* ===== Tag stats table (v2.1.0) ===== */
+.tag-stats-controls { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.tag-stats-controls label { font-size: 13px; color: var(--text-secondary); }
+.tag-stats-controls select {
+    flex: 1; min-width: 200px; padding: 6px 10px;
+    border: 1px solid var(--border-color, rgba(255,255,255,0.15));
+    border-radius: 6px; background: var(--bg-input, rgba(0,0,0,0.2));
+    color: var(--text-main); font-size: 13px;
+}
+.tag-stats-summary { padding: 8px 12px; margin-bottom: 10px; font-size: 13px; color: var(--text-secondary); background: rgba(255,255,255,0.03); border-radius: 6px; }
+.tag-stats-table-wrap { overflow-x: auto; }
+.tag-stats-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tag-stats-table th, .tag-stats-table td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border-color, rgba(255,255,255,0.08)); vertical-align: middle; }
+.tag-stats-table th { background: rgba(255,255,255,0.04); font-weight: 600; color: var(--text-main); }
+.tag-stats-table .tag-acc-low  { color: #ff6b6b; }
+.tag-stats-table .tag-acc-mid  { color: #ffb74d; }
+.tag-stats-table .tag-acc-high { color: #66bb6a; }
+.tag-stats-table tr.tag-stats-untagged td { color: var(--text-secondary); font-style: italic; }
+.tag-stats-good { color: #66bb6a; font-size: 12px; font-weight: 600; }

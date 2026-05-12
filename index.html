@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/192/3976/3976625.png">
 <title>QuizMaster Pro - Tạo Đề Trắc Nghiệm</title>
-<link rel="stylesheet" href="style.css?v=2.0.0">
+<link rel="stylesheet" href="style.css?v=2.1.0">
 <!-- Thư viện đọc file Word (.docx) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 <!-- Thư viện tạo file Word -->
@@ -258,6 +258,16 @@
             <div id="perQuizStats"></div>
         </div>
 
+        <!-- Per-tag stats (v2.1.0) -->
+        <div class="chart-box" style="margin-top:20px">
+            <h3>🏷️ Hieu suat theo chu de</h3>
+            <div class="tag-stats-controls">
+                <label for="tagStatsQuiz">Chon de:</label>
+                <select id="tagStatsQuiz" onchange="renderTagStats()"></select>
+            </div>
+            <div id="tagStatsContent"></div>
+        </div>
+
         <!-- History header + toolbar -->
         <div class="history-header">
             <h3>📜 Lịch sử làm bài</h3>
@@ -359,7 +369,7 @@
     <p style="margin:0">© QuizMaster Pro · <b>Cre: KindCora</b> 💜</p>
 </footer>
 
-<script src="questions-data.js?v=2.0.0"></script>
-<script src="script.js?v=2.0.0"></script>
+<script src="questions-data.js?v=2.1.0"></script>
+<script src="script.js?v=2.1.0"></script>
 </body>
 </html>

@@ -138,3 +138,50 @@
   - Reason: GitHub Pages tự gzip → ROI thấp, chi phí pipeline build cao.
   - Detail: xem roadmap.md mục v2.0.0 → Skipped.
 
+
+---
+
+# Task Checklist — v2.1.0 (Tag & Progress by Topic)
+
+## 🏷️ Tag storage helpers
+- [x] _tagsKey / _tagsCatalogKey / _normTag
+- [x] getAllTagsMap / getQuestionTags / setQuestionTags
+- [x] ddTagToQuestion / removeTagFromQuestion
+- [x] getTagsCatalog / addToTagsCatalog
+- [x] countTaggedQuestions
+- [x] Cap 5 tag/câu × 30 ký tự, dedupe case-insensitive
+
+## ✏️ Tag editor floating card
+- [x] #tagEditorCard HTML trong index.html
+- [x] openTagEditor(quizId) + enderTagEditor()
+- [x] ddTagFromEditor / removeTagFromEditor / onTagInputKey
+- [x] Autocomplete qua <datalist id="tagCatalog_<quizId>">
+- [x] Nút 🏷️ Tag trong quiz card + delegated handler case 'tag'
+- [x] CSS chip, row, btn-mini, meta-tag
+
+## 📊 Per-tag stats
+- [x] computeTagStats(quizId) — Phương án A (wrong-set snapshot)
+- [x] populateTagStatsDropdown() + enderTagStats()
+- [x] Section #tagStatsContent + dropdown trong trang Stats
+- [x] Bảng 5 cột với 3 mức màu accuracy + hàng (Chưa phân loại)
+- [x] Hook trong enderStats() để chạy on-demand
+- [x] CSS .tag-stats-table + .tag-acc-low/mid/high
+
+## 🔁 Wrong-by-tag review
+- [x] startWrongByTagReview(quizId, tag) — quiz tạm id âm với __wrongByTagOf
+- [x] Hook trong submitQuiz (chuỗi fallback __wrongReviewOf/__bookmarkReviewOf/__wrongByTagOf → id)
+- [x] Hook trong note rendering (đọc note từ quiz gốc)
+- [x] Hook trong result banner (__wrongQuizId)
+- [x] Button 🔁 Ôn câu sai trong tag-stats table (delegated data-action="wrong-by-tag")
+
+## 🚀 Release
+- [x] Bump ?v=2.1.0 trong index.html
+- [x] Bump sw.js CACHE_VERSION → quizmaster-v2.1.0-tags
+- [x] 
+ode --check script.js PASS
+- [x] 
+ode --check sw.js PASS
+- [ ] Manual test 3 sub-features trên desktop + mobile (user action)
+
+## ⏭️ Deferred sang v2.2.0
+- [~] Trend 7 ngày per-tag — cần mở rộng history schema với correctMap. Chi tiết: xem roadmap.md mục v2.1.0 → Deferred.

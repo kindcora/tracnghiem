@@ -309,6 +309,54 @@ function startWrongReview(quizId) {
     }
 }
 window.startWrongReview = startWrongReview;
+function startWrongByTagReview(quizId, tag) {
+    try {
+        const baseQuiz = quizzes.find(q => q.id === quizId);
+        if (!baseQuiz) { if (typeof showToast === 'function') showToast('Khong tim thay de goc!', 'error'); return; }
+        const t = String(tag || '').trim();
+        if (!t) return;
+        const tagMap = getAllTagsMap(quizId);
+        const wrongs = new Set(getWrongSet(quizId));
+        const tk = t.toLowerCase();
+        const indices = [];
+        Object.keys(tagMap).forEach(k => {
+            const oi = parseInt(k, 10);
+            if (isNaN(oi)) return;
+            const tags = Array.isArray(tagMap[k]) ? tagMap[k] : [];
+            if (!wrongs.has(oi)) return;
+            if (tags.some(x => String(x).toLowerCase() === tk)) indices.push(oi);
+        });
+        if (!indices.length) {
+            if (typeof showToast === 'function') showToast('\u{1F389} Khong con cau sai cho tag "' + t + '"', 'success', 2500);
+            return;
+        }
+        indices.sort((a, b) => a - b);
+        const subQs = indices.map(oi => baseQuiz.questions[oi]).filter(Boolean);
+        if (!subQs.length) { if (typeof showToast === 'function') showToast('Du lieu tag khong hop le', 'error'); return; }
+        const tempId = -Math.abs(quizId) * 1000 - 9;
+        const existIdx = quizzes.findIndex(q => q.id === tempId);
+        if (existIdx !== -1) quizzes.splice(existIdx, 1);
+        const tempQuiz = {
+            id: tempId,
+            title: '\u{1F501} Cau sai theo tag "' + t + '" \u2014 ' + baseQuiz.title,
+            desc: 'On lai ' + subQs.length + ' cau sai co tag "' + t + '"',
+            time: Math.max(5, Math.ceil(subQs.length * 0.5)),
+            shuffleQ: false, shuffleO: !!baseQuiz.shuffleO,
+            showReviewDetail: true,
+            questions: subQs,
+            __preloaded: true,
+            __wrongByTagOf: quizId,
+            __wrongByTagName: t
+        };
+        quizzes.push(tempQuiz);
+        startQuiz(tempId);
+    } catch (e) {
+        console.error('[startWrongByTagReview]', e);
+        try { if (typeof showToast === 'function') showToast('Loi: ' + (e.message || e), 'error', 3000); } catch (_) {}
+    }
+}
+window.startWrongByTagReview = startWrongByTagReview;
+
 
 // ============================================
 // 🏷️ TAGS PER QUESTION (v2.1.0)
@@ -1948,7 +1996,7 @@ function renderQuestionHTML(q, i) {
     const __bmTitle = __bm ? 'Đã đánh dấu — bấm để bỏ' : 'Đánh dấu xem lại sau';
     // v1.9.0 — Banner ghi chú (nếu câu này đã có note từ lần trước)
     // Đối với quiz tạm 'làm lại câu đánh dấu', đọc note từ quiz GỐC bằng __bookmarkReviewOf
-    const __noteQuizId = (currentQuiz && currentQuiz.__bookmarkReviewOf != null) ? currentQuiz.__bookmarkReviewOf : __quizId;
+    const __noteQuizId = (currentQuiz && currentQuiz.__bookmarkReviewOf != null) ? currentQuiz.__bookmarkReviewOf : ((currentQuiz && currentQuiz.__wrongByTagOf != null) ? currentQuiz.__wrongByTagOf : ((currentQuiz && currentQuiz.__wrongReviewOf != null) ? currentQuiz.__wrongReviewOf : __quizId));
     const __noteText = (__noteQuizId != null) ? getNote(__noteQuizId, __origIdx) : '';
     const __noteBanner = __noteText
         ? `<div class="do-question-note" data-qidx="${i}"><div class="do-question-note-head" onclick="toggleQuestionNote(${i}, event)">📝 Bạn có ghi chú cho câu này — bấm để xem</div><div class="do-question-note-body">${escapeHtml(__noteText)}</div></div>`
@@ -2262,7 +2310,7 @@ function _buildResultHtml(scoreInfo, correct, total, timeStr, reviewVisible) {
         ? `<div class="result-bookmark-row"><span>🚩 Bạn đã đánh dấu <b>${__bmCount}</b> câu xem lại</span><button class="btn-info" style="padding:6px 14px;font-size:13px;width:auto;margin-left:auto" onclick="startBookmarkedReview(${__bmQuizId})">🔁 Làm lại các câu đánh dấu</button></div>`
         : '';
     // v1.9.0 — Banner câu sai (Feature 3)
-    const __wrongQuizId = (currentQuiz && currentQuiz.__wrongReviewOf != null) ? currentQuiz.__wrongReviewOf : (currentQuiz && currentQuiz.__bookmarkReviewOf != null) ? currentQuiz.__bookmarkReviewOf : __bmQuizId;
+    const __wrongQuizId = (currentQuiz && currentQuiz.__wrongReviewOf != null) ? currentQuiz.__wrongReviewOf : (currentQuiz && currentQuiz.__bookmarkReviewOf != null) ? currentQuiz.__bookmarkReviewOf : (currentQuiz && currentQuiz.__wrongByTagOf != null) ? currentQuiz.__wrongByTagOf : __bmQuizId;
     const __wrongCount = __wrongQuizId != null ? countWrong(__wrongQuizId) : 0;
     const __wrongBanner = __wrongCount > 0
         ? `<div class="result-wrong-row"><span>🔁 Còn <b>${__wrongCount}</b> câu bạn chưa làm đúng — luyện đến khi sạch sẽ!</span><button class="btn-danger" style="padding:6px 14px;font-size:13px;width:auto;margin-left:auto" onclick="startWrongReview(${__wrongQuizId})">🔁 Ôn câu sai ngay</button></div>`
@@ -2355,7 +2403,9 @@ function submitQuiz() {
             ? currentQuiz.__wrongReviewOf
             : (currentQuiz && currentQuiz.__bookmarkReviewOf != null)
                 ? currentQuiz.__bookmarkReviewOf
-                : (currentQuiz && currentQuiz.id);
+                : (currentQuiz && currentQuiz.__wrongByTagOf != null)
+                    ? currentQuiz.__wrongByTagOf
+                    : (currentQuiz && currentQuiz.id);
         if (__wQuizId != null && __wQuizId >= 0) updateWrongSet(__wQuizId, questions, userAnswers);
     } catch (e) { console.warn('[updateWrongSet]', e); }
 
@@ -2405,7 +2455,7 @@ function submitQuiz() {
             }
             // Câu SAI: hiển thị thu gọn, click để mở chi tiết bên dưới
             // v1.9.0 — Thêm khung ghi chú trong .review-detail
-            const __nQuizId = (currentQuiz && currentQuiz.__bookmarkReviewOf != null) ? currentQuiz.__bookmarkReviewOf : (currentQuiz && currentQuiz.id);
+            const __nQuizId = (currentQuiz && currentQuiz.__bookmarkReviewOf != null) ? currentQuiz.__bookmarkReviewOf : ((currentQuiz && currentQuiz.__wrongByTagOf != null) ? currentQuiz.__wrongByTagOf : ((currentQuiz && currentQuiz.__wrongReviewOf != null) ? currentQuiz.__wrongReviewOf : (currentQuiz && currentQuiz.id)));
             const __nOrig = (q && q.__origIndex !== undefined) ? q.__origIndex : i;
             const __nText = (__nQuizId != null) ? getNote(__nQuizId, __nOrig) : '';
             const __noteHTML = (__nQuizId != null && __nOrig != null)
@@ -3082,6 +3132,128 @@ function computeStatsOverview() {
     return overview;
 }
 
+
+// ============================================
+// Tag stats (v2.1.0) - Phuong an A: dua tren wrong-set snapshot hien tai
+// ============================================
+function computeTagStats(quizId) {
+    const quiz = quizzes.find(q => q.id === quizId);
+    if (!quiz) return { rows: [], total: 0, taggedQs: 0, untagged: 0, untaggedWrong: 0 };
+    const total = quiz.questions.length;
+    const tagMap = getAllTagsMap(quizId);
+    const wrongSet = new Set(getWrongSet(quizId));
+    const agg = Object.create(null);
+    let taggedQs = 0;
+    let untaggedWrong = 0;
+    let untagged = 0;
+    for (let i = 0; i < total; i++) {
+        const tags = Array.isArray(tagMap[i]) ? tagMap[i] : [];
+        const isWrong = wrongSet.has(i);
+        if (tags.length === 0) {
+            untagged++;
+            if (isWrong) untaggedWrong++;
+            continue;
+        }
+        taggedQs++;
+        tags.forEach(t => {
+            const key = t.toLowerCase();
+            if (!agg[key]) agg[key] = { tag: t, total: 0, wrong: 0 };
+            agg[key].total++;
+            if (isWrong) agg[key].wrong++;
+        });
+    }
+    const rows = Object.keys(agg).map(k => {
+        const r = agg[k];
+        const correct = r.total - r.wrong;
+        const acc = r.total ? Math.round((correct / r.total) * 100) : 0;
+        return { tag: r.tag, total: r.total, wrong: r.wrong, correct: correct, accuracy: acc };
+    }).sort((a, b) => a.accuracy - b.accuracy);
+    return { rows: rows, total: total, taggedQs: taggedQs, untagged: untagged, untaggedWrong: untaggedWrong };
+}
+
+function populateTagStatsDropdown() {
+    const sel = document.getElementById('tagStatsQuiz');
+    if (!sel) return;
+    const realQuizzes = quizzes.filter(q => q.id != null && q.id >= 0);
+    if (!realQuizzes.length) {
+        sel.innerHTML = '<option value=\"\">(Chua co de nao)</option>';
+        return;
+    }
+    const prev = sel.value;
+    sel.innerHTML = realQuizzes.map(q => {
+        const n = countTaggedQuestions(q.id);
+        return '<option value=\"' + q.id + '\">' + escapeHtml(q.title) + ' (' + n + ' cau co tag)</option>';
+    }).join('');
+    if (prev && realQuizzes.some(q => String(q.id) === prev)) sel.value = prev;
+}
+window.populateTagStatsDropdown = populateTagStatsDropdown;
+
+function _tagAccClass(acc) {
+    if (acc < 70) return 'tag-acc-low';
+    if (acc < 85) return 'tag-acc-mid';
+    return 'tag-acc-high';
+}
+
+function renderTagStats() {
+    const sel = document.getElementById('tagStatsQuiz');
+    const host = document.getElementById('tagStatsContent');
+    if (!sel || !host) return;
+    const quizId = parseInt(sel.value, 10);
+    if (isNaN(quizId)) { host.innerHTML = '<p style=\"color:var(--text-secondary);padding:12px\">Chon mot de de xem thong ke theo tag.</p>'; return; }
+    const stats = computeTagStats(quizId);
+    if (!stats.rows.length && stats.untagged === stats.total) {
+        host.innerHTML = '<p style=\"color:var(--text-secondary);padding:12px\">' +
+            'De nay chua co cau nao duoc gan tag. Mo \u201C\u{1F3F7}\uFE0F Tag\u201D tren the de de bat dau gan.' +
+            '</p>';
+        return;
+    }
+    const rowsHtml = stats.rows.map(r => {
+        const cls = _tagAccClass(r.accuracy);
+        const tagSafe = escapeHtml(r.tag);
+        const tagAttr = tagSafe.replace(/\"/g, '&quot;');
+        const reviewBtn = r.wrong > 0
+            ? '<button class=\"btn-mini\" data-action=\"wrong-by-tag\" data-tag=\"' + tagAttr + '\" title=\"On lai cau sai co tag nay\">\u{1F501} On cau sai</button>'
+            : '<span class=\"tag-stats-good\">\u{1F389} Da on xong</span>';
+        return '<tr>' +
+            '<td><span class=\"tag-chip\">' + tagSafe + '</span></td>' +
+            '<td>' + r.total + '</td>' +
+            '<td>' + r.wrong + '</td>' +
+            '<td class=\"' + cls + '\"><b>' + r.accuracy + '%</b></td>' +
+            '<td>' + reviewBtn + '</td>' +
+            '</tr>';
+    }).join('');
+    let untaggedRow = '';
+    if (stats.untagged > 0) {
+        untaggedRow = '<tr class=\"tag-stats-untagged\">' +
+            '<td><i>(Chua phan loai)</i></td>' +
+            '<td>' + stats.untagged + '</td>' +
+            '<td>' + stats.untaggedWrong + '</td>' +
+            '<td>-</td>' +
+            '<td><span style=\"color:var(--text-secondary);font-size:12px\">Gan tag de theo doi</span></td>' +
+            '</tr>';
+    }
+    host.innerHTML =
+        '<div class=\"tag-stats-summary\">Tong: <b>' + stats.total + '</b> cau \u00B7 ' +
+        'Da gan tag: <b>' + stats.taggedQs + '</b> \u00B7 ' +
+        'Tag khac nhau: <b>' + stats.rows.length + '</b></div>' +
+        '<div class=\"tag-stats-table-wrap\" data-quiz-id=\"' + quizId + '\"><table class=\"tag-stats-table\">' +
+        '<thead><tr><th>Tag</th><th>So cau</th><th>Con sai</th><th>Accuracy</th><th>Hanh dong</th></tr></thead>' +
+        '<tbody>' + rowsHtml + untaggedRow + '</tbody></table></div>';
+    // Bind delegated click for wrong-by-tag (idempotent)
+    if (!host.__tagStatsBound) {
+        host.addEventListener('click', function(ev) {
+            const btn = ev.target.closest('button[data-action=\"wrong-by-tag\"]');
+            if (!btn) return;
+            const wrap = btn.closest('[data-quiz-id]');
+            if (!wrap) return;
+            const qid = parseInt(wrap.getAttribute('data-quiz-id'), 10);
+            const tag = btn.getAttribute('data-tag');
+            if (!isNaN(qid) && tag) startWrongByTagReview(qid, tag);
+        });
+        host.__tagStatsBound = true;
+    }
+}
+window.renderTagStats = renderTagStats;
 function renderStats() {
     const ov = computeStatsOverview();
     const total = ov.total;
@@ -3213,6 +3385,12 @@ function renderStats() {
         });
         window.__historyFiltersBound = true;
     }
+
+    // v2.1.0 - Per-tag stats hook
+    try {
+        if (typeof populateTagStatsDropdown === 'function') populateTagStatsDropdown();
+        if (typeof renderTagStats === 'function') renderTagStats();
+    } catch (e) { console.warn('[renderTagStats hook]', e); }
 }
 
 // ============= BỘ ĐỀ ÔN TẬP CÓ SẴN (PRELOADED) =============

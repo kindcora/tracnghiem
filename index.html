@@ -11,13 +11,13 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/192/3976/3976625.png">
 <title>QuizMaster Pro - Tạo Đề Trắc Nghiệm</title>
-<link rel="stylesheet" href="style.css?v=2.1.0">
+<link rel="stylesheet" href="style.css?v=2.2.0">
 <!-- Thư viện đọc file Word (.docx) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 <!-- Thư viện tạo file Word -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/docx/8.5.0/docx.umd.min.js"></script>
 <!-- Thư viện vẽ biểu đồ -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<!-- Chart.js lazy-loaded by ensureChartJs() in script.js when entering Stats page (v2.2.0) -->
 </head>
 <body>
     <a href="#main-content" class="skip-link">Bỏ qua đến nội dung chính</a>
@@ -123,7 +123,7 @@
 <section id="list" class="section">
     <div class="container">
         <h2>📋 Danh Sách Đề Thi</h2>
-        <input type="text" id="searchQuiz" placeholder="🔍 Tìm kiếm đề thi..." oninput="renderQuizList()" style="margin-bottom:20px;padding:12px;width:100%;border:2px solid #e0e0e0;border-radius:8px;">
+        <input type="text" id="searchQuiz" placeholder="🔍 Tìm kiếm đề thi..." oninput="debouncedRenderQuizList()" style="margin-bottom:20px;padding:12px;width:100%;border:2px solid #e0e0e0;border-radius:8px;">
         <div id="quizList" class="quiz-list"></div>
     </div>
 </section>
@@ -369,7 +369,7 @@
     <p style="margin:0">© QuizMaster Pro · <b>Cre: KindCora</b> 💜</p>
 </footer>
 
-<script src="questions-data.js?v=2.1.0"></script>
-<script src="script.js?v=2.1.0"></script>
+<script src="questions-data.js?v=2.2.0"></script>
+<script src="script.js?v=2.2.0"></script>
 </body>
 </html>

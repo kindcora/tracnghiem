@@ -214,3 +214,49 @@ ode --check script.js PASS
 ode --check sw.js PASS
 - ?v=2.1.0 ở index.html ✅
 - CACHE_VERSION = 'quizmaster-v2.1.0-tags' ở sw.js ✅
+
+---
+
+# v2.2.0 — Performance & UX Polish
+
+## Goal
+Fix pain point UI mobile đã báo (Tùy chỉnh đề + Trạng thái câu hỏi xung đột trên iPhone Safari) + 10 targeted fix cải thiện trải nghiệm cả mobile lẫn desktop, không refactor toàn bộ.
+
+## Shipped
+
+### P0 — Mobile pain points (Batch A)
+- ✅ **Fix #1 QSP panel** — bump z-index 110/111 + env(safe-area-inset-bottom) cho iPhone notch, đảm bảo không bị nút Nộp bài che.
+- ✅ **Fix #2 Customize floating card** — full-width edge-to-edge trên mobile (10px margin), dùng dvh xử lý iOS Safari viewport shrink khi keyboard mở, tắt animation tránh giật, -webkit-overflow-scrolling:touch.
+- ✅ **Fix #5 iOS Safari input zoom** — universal ont-size:16px !important cho mọi input/textarea/select trong @media (max-width:768px), cover cả #searchQuiz, #historySearch, .history-filter, #tagStatsQuiz, .tag-row-input input (input ngoài .form-group).
+
+### P1 — Mobile UX (Batch B)
+- ✅ **Fix #3 Touch target ≥44×44px** — expand (hover:none) and (pointer:coarse) cover .fc-btn, .bookmark-btn, .tag-chip-x, .qsp-toggle, .qsp-mobile-toggle, .btn-mini, .shortcut-btn, .close-btn. Tag chip × dùng padding+negative margin để vùng cảm ứng rộng mà không phá layout.
+- ✅ **Fix #4 Sticky bottom action bar** — #doQuiz .btn-primary sticky bottom trên mobile, full-width edge-to-edge, font 17px bold, shadow phía trên, safe-area-inset cho iPhone notch.
+
+### P2 — Performance + Desktop (Batch C)
+- ✅ **Fix #6 Lazy-load Chart.js** — gỡ <script src="chart.js"> eager khỏi index.html, thêm ensureChartJs() Promise-based idempotent, enderStats() async await trước khi vẽ chart. Tiết kiệm ~150KB JS cho lần load đầu cho user không vào trang Stats.
+- ✅ **Fix #7 Debounce search** — oninput="renderQuizList()" → debouncedRenderQuizList() 180ms (tránh re-render với 450 câu mỗi keystroke).
+- ✅ **Fix #8 Hover transitions desktop** — @media (hover:hover) and (pointer:fine) smooth transitions cho .quiz-item:hover, .btn-*, .nav-btn (tránh apply lên touch device gây dính hover state).
+- ✅ **Fix #9 Wide-screen layout** — container max-width 1440px (>1400px) và 1680px (>1800px), quiz-list min-card 340px gap 24px trên màn hình rộng.
+- ✅ **Fix #10 Release** — bump ?v=2.2.0 + CACHE_VERSION → quizmaster-v2.2.0-polish.
+
+## Files Modified
+- style.css — 3 block append: Batch A (P0 mobile fixes), Batch B (touch+sticky), Batch C (hover+wide-screen). Tổng ~70 dòng CSS mới.
+- script.js — ensureChartJs() + debouncedRenderQuizList() + enderStats thành async.
+- index.html — Chart.js script tag → lazy comment, oninput → debounced, ?v=2.2.0.
+- sw.js — CACHE_VERSION bump.
+
+## Design Decisions
+- Audit + targeted fixes (Phương án A) thay vì full rewrite — ROI cao, rủi ro thấp.
+- Chia 3 batch (P0/P1/P2) để user test được sớm sau từng batch.
+- dvh cho iOS Safari viewport (fallback h) — xử lý zoom keyboard.
+- Giữ 8 console.log debug — không cleanup vì giúp debug user bug sau này.
+- Quiz list đã dùng grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)) nên Fix #9 chỉ cần expand container max-width + bump min-card cho dày hơn.
+
+## Verify
+- 
+ode --check script.js PASS
+- 
+ode --check sw.js PASS
+- ?v=2.2.0 ở index.html ✅
+- CACHE_VERSION = 'quizmaster-v2.2.0-polish' ở sw.js ✅

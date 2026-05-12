@@ -185,3 +185,39 @@ ode --check sw.js PASS
 
 ## ⏭️ Deferred sang v2.2.0
 - [~] Trend 7 ngày per-tag — cần mở rộng history schema với correctMap. Chi tiết: xem roadmap.md mục v2.1.0 → Deferred.
+
+---
+
+# Task Checklist — v2.2.0 (Performance & UX Polish)
+
+## P0 — Mobile pain points (Batch A)
+- [x] Fix #1: QSP panel z-index 110/111 + safe-area-inset
+- [x] Fix #2: Customize floating card responsive (dvh, edge-to-edge, no anim)
+- [x] Fix #5: iOS Safari input 16px floor cho mọi input/textarea/select
+
+## P1 — Mobile UX (Batch B)
+- [x] Fix #3: Touch target ≥44×44 (fc-btn, bookmark-btn, tag-chip-x, qsp-toggle, btn-mini, ...)
+- [x] Fix #4: Sticky bottom action bar cho nút Nộp bài (mobile)
+
+## P2 — Performance + Desktop (Batch C)
+- [x] Fix #6: Lazy-load Chart.js (ensureChartJs Promise + renderStats async)
+- [x] Fix #7: Debounce searchQuiz input 180ms
+- [x] Fix #8: Hover transitions chỉ apply trên (hover:hover) and (pointer:fine)
+- [x] Fix #9: Wide-screen container 1440/1680px, quiz-list min-card 340px
+
+## Release
+- [x] Fix #10: Bump ?v=2.2.0 ở index.html
+- [x] Fix #10: Bump sw.js CACHE_VERSION → quizmaster-v2.2.0-polish
+- [x] 
+ode --check script.js PASS
+- [x] 
+ode --check sw.js PASS
+- [ ] Manual test trên iOS Safari + desktop (user action)
+
+## Test focus (iOS Safari)
+- [ ] Focus search → không zoom
+- [ ] Mở Customize → full-width, scroll mượt khi keyboard mở
+- [ ] Panel trạng thái câu hỏi → không bị Nộp bài che, không chồng mobile toggle
+- [ ] Nút Nộp bài sticky bottom edge-to-edge
+- [ ] Tag chip × dễ bấm
+- [ ] Trang Stats lần đầu → Chart.js load lazy (xem Network tab)

@@ -2855,3 +2855,64 @@ select:focus-visible,
         animation: none; /* tắt animation slide để tránh giật khi keyboard pops */
     }
 }
+
+/* ===== v2.2.0 — UX Polish (Batch B: P1 mobile UX) ===== */
+
+/* Fix #3: Expand touch target ≥44×44px cho mọi icon button trên touch device */
+@media (hover: none) and (pointer: coarse) {
+    .fc-btn, .bookmark-btn, .tag-chip-x, .qsp-toggle,
+    .qsp-mobile-toggle, .btn-mini, .shortcut-btn, .close-btn {
+        min-width: 44px;
+        min-height: 44px;
+    }
+    /* Tag chip x đặc biệt: giữ chip nhỏ nhưng vùng cảm ứng rộng qua padding */
+    .tag-chip-x {
+        padding: 8px;
+        margin: -6px 0 -6px 2px;
+    }
+}
+
+/* Fix #4: Sticky bottom action bar khi làm bài (mobile) — nút Nộp bài luôn visible */
+@media (max-width: 768px) {
+    #doQuiz .btn-primary {
+        position: sticky;
+        bottom: 0;
+        bottom: env(safe-area-inset-bottom, 0px);
+        width: calc(100% + 32px);
+        margin: 16px -16px 0;
+        padding: 16px;
+        font-size: 17px;
+        font-weight: 700;
+        border-radius: 0;
+        box-shadow: 0 -4px 16px rgba(0,0,0,0.3);
+        z-index: 50;
+    }
+}
+
+/* ===== v2.2.0 — UX Polish (Batch C: P2 perf + desktop) ===== */
+
+/* Fix #8: Smoother hover/transition on desktop (skip touch devices) */
+@media (hover: hover) and (pointer: fine) {
+    .quiz-item, .feature-card, .stat-card {
+        transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+    .quiz-item:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+    }
+    .btn-primary, .btn-secondary, .btn-info, .btn-danger, .btn-success, .btn-warning {
+        transition: transform 0.15s ease, box-shadow 0.2s ease, filter 0.15s ease;
+    }
+    .nav-btn {
+        transition: background-color 0.15s ease, color 0.15s ease;
+    }
+}
+
+/* Fix #9: Wide-screen layout (>1400px) — wider container, denser quiz grid */
+@media (min-width: 1400px) {
+    .container { max-width: 1440px; }
+    .quiz-list { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 24px; }
+}
+@media (min-width: 1800px) {
+    .container { max-width: 1680px; }
+}

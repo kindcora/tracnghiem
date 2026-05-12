@@ -2916,3 +2916,29 @@ select:focus-visible,
 @media (min-width: 1800px) {
     .container { max-width: 1680px; }
 }
+
+/* ===== Practice Mode (Luyện tập) v2.3.0 ===== */
+.do-question.practice-revealed label { cursor: default; }
+.do-question label.practice-correct {
+    background: rgba(34,197,94,0.15);
+    border-color: #22c55e !important;
+    color: #14532d;
+    font-weight: 600;
+}
+.do-question label.practice-wrong {
+    background: rgba(239,68,68,0.15);
+    border-color: #ef4444 !important;
+    color: #7f1d1d;
+    text-decoration: line-through;
+}
+.practice-feedback {
+    margin-top: 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 14px;
+    line-height: 1.5;
+}
+.practice-feedback.ok { background: rgba(34,197,94,0.12); color:#065f46; border: 1px solid rgba(34,197,94,0.35); }
+.practice-feedback.no { background: rgba(239,68,68,0.12); color:#7f1d1d; border: 1px solid rgba(239,68,68,0.35); }
+.practice-explain { margin-top: 6px; font-size: 13px; opacity: 0.9; }
+#doQuiz.practice-mode .timer-display { display: none !important; }

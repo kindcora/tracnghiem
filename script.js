@@ -1,4 +1,4 @@
-// ============================================
+﻿// ============================================
 // 🛡️ SAFE STORAGE & GLOBAL ERROR HANDLERS (v1.4.0)
 // Critical for mobile WebView (Zalo, iOS Safari) where:
 // - localStorage quota is very small (Zalo) or zero (Safari Private)
@@ -2031,7 +2031,7 @@ function editQuizTime(id) { customizeQuiz(id); }
 // Helper: render 1 câu hỏi thành HTML
 function renderQuestionHTML(q, i) {
     const opts = q.options.map((opt, j) =>
-        `<label><input type="radio" name="q_${i}" value="${j}" onchange="userAnswers[${i}]=${j};updateProgress()">
+        `<label><input type="radio" name="q_${i}" value="${j}" onchange="onAnswerChange(${i},${j})">
             ${String.fromCharCode(65+j)}. ${escapeHtml(opt)}</label>`
     ).join('');
     // v1.9.0 — Bookmark button (cờ xem lại sau)
@@ -2086,6 +2086,81 @@ function renderQuestionsInChunks(container, questions, chunkSize = 30) {
     schedule(renderNext);
 }
 
+// ============= LUYEN TAP (Practice Mode) =============
+function onAnswerChange(qIdx, ansIdx) {
+    try {
+        userAnswers[qIdx] = ansIdx;
+        if (currentQuiz && currentQuiz.__practiceMode) {
+            practiceReveal(qIdx, ansIdx);
+        }
+        if (typeof updateProgress === 'function') updateProgress();
+    } catch (e) { console.error('[onAnswerChange]', e); }
+}
+window.onAnswerChange = onAnswerChange;
+
+function practiceReveal(qIdx, ansIdx) {
+    if (!shuffledQuiz || !shuffledQuiz.questions) return;
+    const q = shuffledQuiz.questions[qIdx];
+    if (!q) return;
+    const correctIdx = (typeof q.correct === 'number') ? q.correct : (typeof q.answer === 'number' ? q.answer : -1);
+    const questionEl = document.querySelectorAll('.do-question')[qIdx];
+    if (!questionEl) return;
+    if (questionEl.classList.contains('practice-revealed')) return;
+    questionEl.classList.add('practice-revealed');
+    const labels = questionEl.querySelectorAll('label');
+    labels.forEach((lb, j) => {
+        const input = lb.querySelector('input[type="radio"]');
+        if (input) input.disabled = true;
+        if (j === correctIdx) lb.classList.add('practice-correct');
+        if (j === ansIdx && ansIdx !== correctIdx) lb.classList.add('practice-wrong');
+    });
+    const isRight = ansIdx === correctIdx;
+    const correctLetter = correctIdx >= 0 ? String.fromCharCode(65 + correctIdx) : '?';
+    const expl = (q.explanation || q.explain || q.giai_thich || '').toString().trim();
+    const fb = document.createElement('div');
+    fb.className = 'practice-feedback ' + (isRight ? 'ok' : 'no');
+    fb.innerHTML = isRight
+        ? ('\u2705 <b>Chinh xac!</b>' + (expl ? '<div class="practice-explain">\u{1F4A1} ' + escapeHtml(expl) + '</div>' : ''))
+        : ('\u274C <b>Chua dung.</b> Dap an dung: <b>' + correctLetter + '</b>' + (expl ? '<div class="practice-explain">\u{1F4A1} ' + escapeHtml(expl) + '</div>' : ''));
+    questionEl.appendChild(fb);
+}
+window.practiceReveal = practiceReveal;
+
+function startPractice(quizId) {
+    try {
+        const baseQuiz = quizzes.find(q => q.id === quizId);
+        if (!baseQuiz) return showToast('Khong tim thay de!', 'error');
+        if (!baseQuiz.questions || !baseQuiz.questions.length) return showToast('De chua co cau hoi!', 'error');
+        const subQs = baseQuiz.questions.map((qq, oi) => Object.assign({}, qq, { __origIndex: (qq.__origIndex !== undefined ? qq.__origIndex : oi) }));
+        const tempId = -Math.abs(quizId) * 1000 - 11;
+        const existIdx = quizzes.findIndex(q => q.id === tempId);
+        if (existIdx !== -1) quizzes.splice(existIdx, 1);
+        const tempQuiz = {
+            id: tempId,
+            title: '\u{1F4D6} Luyen tap \u2014 ' + baseQuiz.title,
+            desc: 'Luyen tap voi phan hoi tuc thi',
+            time: 9999,
+            shuffleQ: !!baseQuiz.shuffleQ,
+            shuffleO: !!baseQuiz.shuffleO,
+            showReviewDetail: true,
+            questions: subQs,
+            __preloaded: true,
+            __practiceMode: true,
+            __practiceOf: quizId
+        };
+        quizzes.push(tempQuiz);
+        startQuiz(tempId);
+        try {
+            const sec = document.getElementById('doQuiz');
+            if (sec) sec.classList.add('practice-mode');
+        } catch (_) {}
+        try { showToast('\u{1F4D6} Che do luyen tap \u2014 chon dap an de xem phan hoi ngay', 'success', 2200); } catch (_) {}
+    } catch (e) {
+        console.error('[startPractice]', e);
+        try { showToast('Loi khi mo luyen tap: ' + (e.message || e), 'error', 4000); } catch (_) {}
+    }
+}
+window.startPractice = startPractice;
 function startQuiz(id) {
     try {
         currentQuiz = quizzes.find(q => q.id === id);
